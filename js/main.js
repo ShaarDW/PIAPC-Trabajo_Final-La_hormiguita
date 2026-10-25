@@ -15,6 +15,7 @@ window.addEventListener('DOMContentLoaded', function() {
       width: 32 * 24,
       height: 32 * 16,
       parent: document.getElementById('phaser-game'),
+      backgroundColor: '#1a1a1a',
       scene: [JuegoEscena]
     });
     console.log('Juego iniciado con class');

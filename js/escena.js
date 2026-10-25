@@ -15,6 +15,10 @@ class JuegoEscena extends Phaser.Scene {
       'piedra': 0x2F2F2F
     };
 
+    if (window.Arte && window.Arte.crearTexturas) {
+      window.Arte.crearTexturas(this);
+    }
+
     this.grupoMapa = this.add.group();
     this.grupoHormiguero = this.add.group();
     this.grupoComida = this.add.group();
@@ -24,6 +28,8 @@ class JuegoEscena extends Phaser.Scene {
     this.grupoCamino = this.add.group();
     this.grupoDebugExtra = this.add.group();
     this._firmaComida = '';
+    this._mapaRenderTexture = null;
+    this._mapaBg = null;
 
     this.dibujarTodo(colores, TAMANO_TILE);
 
@@ -45,8 +51,12 @@ class JuegoEscena extends Phaser.Scene {
       tPaso: 0, duracionPaso: 0
     };
     const hv = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, TAMANO_TILE) : { x: window.hormiguero.x * 32 + 16, y: window.hormiguero.y * 32 + 16 };
-    this.hormigaSprite = this.add.rectangle(hv.x, hv.y, 14, 14, 0x000000).setStrokeStyle(2, 0xFFFFFF);
-    this.hormigaSprite.setDepth(100);
+    if (window.HormigaVisual && window.HormigaVisual.crearHormigaVisual) {
+      this.hormigaSprite = window.HormigaVisual.crearHormigaVisual(this, hv.x, hv.y);
+    } else {
+      this.hormigaSprite = this.add.rectangle(hv.x, hv.y, 14, 14, 0x000000).setStrokeStyle(2, 0xFFFFFF);
+      this.hormigaSprite.setDepth(100);
+    }
 
     this.fsm = window.crearFSM ? window.crearFSM() : { estado: 'EXPLORAR', energia: 100, llevaComida: false, comidaEntregada: 0, memoriaConocidas: [], memoriaInaccesibles: new Set(), visitadas: new Set() };
 
@@ -65,9 +75,17 @@ class JuegoEscena extends Phaser.Scene {
   }
 
   dibujarTodo(colores, TAMANO_TILE) {
-    this.grupoMapa.clear(true, true);
-    this.grupoHormiguero.clear(true, true);
-    this.grupoComida.clear(true, true);
+    if (this.grupoMapa) this.grupoMapa.clear(true, true);
+    if (this.grupoHormiguero) this.grupoHormiguero.clear(true, true);
+    if (this.grupoComida) this.grupoComida.clear(true, true);
+    if (this._mapaBg) {
+      this._mapaBg.destroy();
+      this._mapaBg = null;
+    }
+    if (this._mapaRenderTexture) {
+      this._mapaRenderTexture.destroy();
+      this._mapaRenderTexture = null;
+    }
     for (let y = 0; y < window.ALTO; y++) {
       for (let x = 0; x < window.ANCHO; x++) {
         const celda = window.mapa[y][x];
@@ -80,10 +98,15 @@ class JuegoEscena extends Phaser.Scene {
     }
     const hormiX = window.hormiguero.x * 32 + 16;
     const hormiY = window.hormiguero.y * 32 + 16;
-    const hrect = this.add.rectangle(hormiX, hormiY, 16, 16, 0xFFD700);
-    hrect.setStrokeStyle(2, 0x000000);
-    hrect.setDepth(10);
-    this.grupoHormiguero.add(hrect);
+    const gH = this.add.graphics();
+    gH.fillStyle(0x6B4F2A, 1);
+    gH.fillEllipse(hormiX, hormiY + 2, 18, 12);
+    gH.fillStyle(0x8B6F3C, 1);
+    gH.fillEllipse(hormiX, hormiY, 14, 10);
+    gH.fillStyle(0x2F1F10, 1);
+    gH.fillEllipse(hormiX, hormiY, 4, 3);
+    gH.setDepth(5);
+    this.grupoHormiguero.add(gH);
     this.dibujarComidas(TAMANO_TILE);
   }
 
@@ -166,9 +189,14 @@ class JuegoEscena extends Phaser.Scene {
     if (this.hormiga && window.crearHormiga) {
       this.hormiga = window.crearHormiga(window.hormiguero.x, window.hormiguero.y);
       if (this.hormigaSprite) {
-        const hv = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, this.tamanoTile) : { x: window.hormiguero.x * 32 + 16, y: window.hormiguero.y * 32 + 16 };
-        this.hormigaSprite.x = hv.x;
-        this.hormigaSprite.y = hv.y;
+        if (this.hormigaSprite.destroy) this.hormigaSprite.destroy();
+        this.hormigaSprite = null;
+      }
+      const hv = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, this.tamanoTile) : { x: window.hormiguero.x * 32 + 16, y: window.hormiguero.y * 32 + 16 };
+      if (window.HormigaVisual && window.HormigaVisual.crearHormigaVisual) {
+        this.hormigaSprite = window.HormigaVisual.crearHormigaVisual(this, hv.x, hv.y);
+      } else {
+        this.hormigaSprite = this.add.rectangle(hv.x, hv.y, 14, 14, 0x000000).setStrokeStyle(2, 0xFFFFFF);
         this.hormigaSprite.setDepth(100);
       }
     }
@@ -201,7 +229,7 @@ class JuegoEscena extends Phaser.Scene {
     }
     const mov = this.hormiga && this.hormiga.enMovimiento && !this.hormiga.pausado ? 'MOVIENDO' : (this.hormiga && this.hormiga.pausado ? 'PAUSADO' : 'QUIETA');
     const estado = this.fsm ? this.fsm.estado : '-';
-    const energia = this.fsm ? this.fsm.energia : '-';
+    const energia = this.fsm ? this.fsm.energia : 0;
     const entregadas = this.fsm ? this.fsm.comidaEntregada : 0;
     let aviso = '';
     if (typeof window !== 'undefined' && window._bfsAvisoSeguro) {
@@ -212,21 +240,17 @@ class JuegoEscena extends Phaser.Scene {
     if (window.fuentesComida && window.fuentesComida.length === 0) {
       avisoComida = '<div>No queda comida</div>';
     }
-    hud.innerHTML = '<div>Algoritmo: ' + algo + '</div>' +
-                    '<div>Navegacion: ' + (this.modoNavegacion || 'directa') + ' (N)</div>' +
-                    '<div>Modo: ' + (this.modoAutonomo ? 'AUTONOMO (M)' : 'MANUAL (M)') + '</div>' +
-                    '<div>FSM: ' + estado + '</div>' +
-                    '<div>Energia: ' + energia + '</div>' +
-                    '<div>Comida entregada: ' + entregadas + '</div>' +
-                    '<div>Debug (D): ' + (this.debugActivo ? 'ON' : 'OFF') + '</div>' +
-                    '<div>Costo camino: ' + costo + '</div>' +
-                    '<div>Exploradas: ' + exploradas + '</div>' +
-                    '<div>Hormiga: ' + mov + '</div>' +
-                    '<div>Vel: ' + (this.hormiga ? this.hormiga.velocidadSim.toFixed(2) : '1.00') + '</div>' +
-                    '<div>Shift+Click: destino | Click izq: piedra | Click der: comida</div>' +
-                    '<div>R: regenerar | T: mapa prueba</div>' +
-                    aviso +
+    const pct = Math.max(0, Math.min(100, energia));
+    const barra = '<div style="margin:2px 0;"><div style="background:#333;height:6px;width:90px;border:1px solid #000;"><div style="background:' + (pct<30?'#ff4444':'#44ff44') + ';height:6px;width:' + pct + '%;"></div></div></div>';
+    hud.innerHTML = '<div style="font-weight:bold;">Hormiga recolectora</div>' +
+                    '<div><b>Búsqueda</b>: ' + algo + ' | Costo: ' + costo + ' | Exploradas: ' + exploradas + '</div>' +
+                    '<div><b>Navegación</b>: ' + (this.modoNavegacion || 'directa') + ' (N)</div>' +
+                    '<div><b>Hormiga</b>: ' + estado + ' | ' + mov + ' | Vel: ' + (this.hormiga ? this.hormiga.velocidadSim.toFixed(2) : '1.00') + '</div>' +
+                    '<div><b>Energía</b>: ' + energia + barra + '</div>' +
+                    '<div><b>Comida entregada</b>: ' + entregadas + '</div>' +
                     avisoComida +
+                    '<div><b>Controles</b>: 1/2/3 N M D Espacio +/- R T | Shift+Click destino | Click izq piedra | Click der comida</div>' +
+                    aviso +
                     (this.resultadoActual && this.resultadoActual.camino === null ? '<div>sin camino</div>' : '');
   }
 
@@ -407,6 +431,7 @@ class JuegoEscena extends Phaser.Scene {
     } else {
       if (window.ponerPiedra) window.ponerPiedra(tx, ty);
     }
+    // revertido a rectangulos de colores
     if (this.fsm && window.limpiarInaccesibles) {
       window.limpiarInaccesibles(this.fsm);
       if (this.fsm.esperandoSinObjetivo && this.modoAutonomo && window.actualizarFSM) {
@@ -583,6 +608,10 @@ class JuegoEscena extends Phaser.Scene {
         // if transitable, do nothing special
       }
       window.actualizarHormiga(this.hormiga, delta, window.costo);
+      // actualizar visual hormiga
+      if (this.hormigaSprite && window.HormigaVisual && window.HormigaVisual.actualizarHormigaVisual && this.hormigaSprite._gfxCuerpo !== undefined) {
+        window.HormigaVisual.actualizarHormigaVisual(this.hormigaSprite, this.hormiga, this.fsm ? this.fsm.estado : null, this.hormiga.velocidadSim);
+      }
       // bajar energia UNA SOLA VEZ por casilla completada
       if (this.fsm && window.bajarEnergia && casillaAntes && this.hormiga.casilla) {
         if (casillaAntes.x !== this.hormiga.casilla.x || casillaAntes.y !== this.hormiga.casilla.y) {
