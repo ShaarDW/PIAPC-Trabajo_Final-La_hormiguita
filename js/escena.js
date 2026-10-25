@@ -90,10 +90,44 @@ class JuegoEscena extends Phaser.Scene {
       for (let x = 0; x < window.ANCHO; x++) {
         const celda = window.mapa[y][x];
         const color = colores[celda.tipo] || 0x000000;
-        const rect = this.add.rectangle(x * TAMANO_TILE + 16, y * TAMANO_TILE + 16, TAMANO_TILE - 1, TAMANO_TILE - 1, color);
-        rect.setStrokeStyle(1, 0x000000);
+        const rect = this.add.rectangle(x * TAMANO_TILE + 16, y * TAMANO_TILE + 16, TAMANO_TILE - 2, TAMANO_TILE - 2, color);
+        rect.setStrokeStyle(0.5, 0x000000, 0.3);
         rect.setDepth(0);
         this.grupoMapa.add(rect);
+        // add small decorative elements
+        if (celda.tipo === 'pasto_alto') {
+          const g = this.add.graphics();
+          g.lineStyle(1, 0x7a9f2a, 0.6);
+          g.beginPath();
+          g.moveTo(x * TAMANO_TILE + 8, y * TAMANO_TILE + 28);
+          g.lineTo(x * TAMANO_TILE + 10, y * TAMANO_TILE + 18);
+          g.moveTo(x * TAMANO_TILE + 16, y * TAMANO_TILE + 28);
+          g.lineTo(x * TAMANO_TILE + 16, y * TAMANO_TILE + 16);
+          g.moveTo(x * TAMANO_TILE + 24, y * TAMANO_TILE + 28);
+          g.lineTo(x * TAMANO_TILE + 22, y * TAMANO_TILE + 18);
+          g.strokePath();
+          g.setDepth(1);
+          this.grupoMapa.add(g);
+        } else if (celda.tipo === 'barro') {
+          const g = this.add.graphics();
+          g.fillStyle(0x4a2f1c, 0.4);
+          g.fillCircle(x * TAMANO_TILE + 10, y * TAMANO_TILE + 12, 3);
+          g.fillCircle(x * TAMANO_TILE + 22, y * TAMANO_TILE + 20, 2);
+          g.setDepth(1);
+          this.grupoMapa.add(g);
+        } else if (celda.tipo === 'expuesta') {
+          const g = this.add.graphics();
+          g.fillStyle(0xf0b86c, 0.3);
+          g.fillRect(x * TAMANO_TILE + 2, y * TAMANO_TILE + 2, 28, 6);
+          g.setDepth(1);
+          this.grupoMapa.add(g);
+        } else if (celda.tipo === 'piedra') {
+          const g = this.add.graphics();
+          g.fillStyle(0x1f1f1f, 0.5);
+          g.fillRoundedRect(x * TAMANO_TILE + 8, y * TAMANO_TILE + 10, 10, 8, 3);
+          g.setDepth(2);
+          this.grupoMapa.add(g);
+        }
       }
     }
     const hormiX = window.hormiguero.x * 32 + 16;
@@ -233,25 +267,32 @@ class JuegoEscena extends Phaser.Scene {
     const entregadas = this.fsm ? this.fsm.comidaEntregada : 0;
     let aviso = '';
     if (typeof window !== 'undefined' && window._bfsAvisoSeguro) {
-      aviso = '<div>BFS: sin ruta segura, cruza zona expuesta</div>';
+      aviso = '<div style="color:#ffcc00;">BFS: sin ruta segura, cruza zona expuesta</div>';
       window._bfsAvisoSeguro = false;
     }
     let avisoComida = '';
     if (window.fuentesComida && window.fuentesComida.length === 0) {
-      avisoComida = '<div>No queda comida</div>';
+      avisoComida = '<div style="color:#ff6666;">Sin comida</div>';
     }
     const pct = Math.max(0, Math.min(100, energia));
-    const barra = '<div style="margin:2px 0;"><div style="background:#333;height:6px;width:90px;border:1px solid #000;"><div style="background:' + (pct<30?'#ff4444':'#44ff44') + ';height:6px;width:' + pct + '%;"></div></div></div>';
-    hud.innerHTML = '<div style="font-weight:bold;">Hormiga recolectora</div>' +
-                    '<div><b>Búsqueda</b>: ' + algo + ' | Costo: ' + costo + ' | Exploradas: ' + exploradas + '</div>' +
-                    '<div><b>Navegación</b>: ' + (this.modoNavegacion || 'directa') + ' (N)</div>' +
-                    '<div><b>Hormiga</b>: ' + estado + ' | ' + mov + ' | Vel: ' + (this.hormiga ? this.hormiga.velocidadSim.toFixed(2) : '1.00') + '</div>' +
-                    '<div><b>Energía</b>: ' + energia + barra + '</div>' +
-                    '<div><b>Comida entregada</b>: ' + entregadas + '</div>' +
+    const barra = '<div style="margin:4px 0;"><div style="background:#222;height:8px;width:110px;border-radius:4px;overflow:hidden;border:1px solid #555;"><div style="background:linear-gradient(90deg,' + (pct<30?'#ff4444,#ff6666':'#44ff44,#66ff66') + ');height:8px;width:' + pct + '%;"></div></div><div style="font-size:11px;">' + energia + '/100</div></div>';
+    hud.innerHTML = '<div style="font-weight:bold;font-size:14px;margin-bottom:4px;">🐜 Hormiga recolectora</div>' +
+                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>IA</b><br/>Alg: ' + algo + ' | Nav: ' + (this.modoNavegacion || 'directa') + ' (N)<br/>Modo: ' + (this.modoAutonomo ? 'AUTÓNOMO (M)' : 'MANUAL (M)') + '</div>' +
+                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>Estado</b><br/>FSM: ' + estado + ' | ' + mov + '<br/>Vel: ' + (this.hormiga ? this.hormiga.velocidadSim.toFixed(2) : '1.00') + '</div>' +
+                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>Energía</b>' + barra + '</div>' +
+                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>Recolecta</b><br/>Entregadas: ' + entregadas + '<br/>Camino: ' + costo + ' | Expl: ' + exploradas + '</div>' +
                     avisoComida +
-                    '<div><b>Controles</b>: 1/2/3 N M D Espacio +/- R T | Shift+Click destino | Click izq piedra | Click der comida</div>' +
                     aviso +
-                    (this.resultadoActual && this.resultadoActual.camino === null ? '<div>sin camino</div>' : '');
+                    (this.resultadoActual && this.resultadoActual.camino === null ? '<div style="color:#ff6666;">Sin camino</div>' : '');
+    // Add controls at bottom
+    let controls = document.getElementById('controls');
+    if (!controls) {
+      controls = document.createElement('div');
+      controls.id = 'controls';
+      controls.style.cssText = 'position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-family:monospace;white-space:nowrap;';
+      document.body.appendChild(controls);
+    }
+    controls.innerHTML = '<b>Controles:</b> [1/2/3] Algoritmo | [N] Navegación | [M] Modo | [D] Debug | [Espacio] Pausa | [+/-] Velocidad | [R] Generar | [T] Prueba | [Shift+Click] Destino | [Click izq] Piedra | [Click der] Comida';
   }
 
   limpiarDebug() {
