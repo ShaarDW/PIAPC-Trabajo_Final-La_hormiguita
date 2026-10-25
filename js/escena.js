@@ -18,9 +18,12 @@ class JuegoEscena extends Phaser.Scene {
     this.grupoMapa = this.add.group();
     this.grupoHormiguero = this.add.group();
     this.grupoComida = this.add.group();
+    this.grupoCarga = this.add.group();
+    this.grupoEntrega = this.add.group();
     this.grupoExploradas = this.add.group();
     this.grupoCamino = this.add.group();
     this.grupoDebugExtra = this.add.group();
+    this._firmaComida = '';
 
     this.dibujarTodo(colores, TAMANO_TILE);
 
@@ -89,11 +92,65 @@ class JuegoEscena extends Phaser.Scene {
     if (window.fuentesComida) {
       for (let i = 0; i < window.fuentesComida.length; i++) {
         const c = window.fuentesComida[i];
-        const circ = this.add.circle(c.x * 32 + 16, c.y * 32 + 16, 6, 0xFF6347);
-        circ.setStrokeStyle(2, 0x000000);
-        circ.setDepth(10);
-        this.grupoComida.add(circ);
+        if (c.porciones === undefined || c.porciones === null) {
+          try { console.warn('Fuente sin porciones definidas', c); } catch(e){}
+          continue;
+        }
+        if (c.porciones <= 0) continue;
+        const porciones = c.porciones;
+        for (let m = 0; m < porciones; m++) {
+          const ox = c.x * 32 + 16;
+          const oy = c.y * 32 + 16;
+          const ang = (m / porciones) * Math.PI * 2;
+          const r = 3.5;
+          const cx = ox + Math.cos(ang) * 4;
+          const cy = oy + Math.sin(ang) * 4;
+          const circ = this.add.circle(cx, cy, 2.5, 0xFF6347);
+          circ.setStrokeStyle(1, 0x000000);
+          circ.setDepth(11);
+          this.grupoComida.add(circ);
+        }
       }
+    }
+  }
+
+  dibujarCarga() {
+    if (!this.grupoCarga) return;
+    this.grupoCarga.clear(true, true);
+    if (!this.fsm || !this.hormiga) return;
+    if (!this.fsm.llevaComida) return;
+    const hv = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, this.tamanoTile || 32) : { x: this.hormiga.casilla.x * 32 + 16, y: this.hormiga.casilla.y * 32 + 16 };
+    const circ = this.add.circle(hv.x, hv.y - 10, 3, 0xFF6347);
+    circ.setStrokeStyle(1, 0x000000);
+    circ.setDepth(150);
+    this.grupoCarga.add(circ);
+  }
+
+  dibujarEntrega() {
+    if (!this.grupoEntrega) return;
+    this.grupoEntrega.clear(true, true);
+    if (!window.hormiguero || !this.fsm) return;
+    const entregadas = this.fsm.comidaEntregada || 0;
+    const ox = window.hormiguero.x * 32 + 16;
+    const oy = window.hormiguero.y * 32 + 16;
+    if (entregadas <= 0) return;
+    if (entregadas <= 10) {
+      for (let i = 0; i < entregadas; i++) {
+        const circ = this.add.circle(ox + 12 + (i % 5) * 4, oy - 8 - Math.floor(i/5) * 4, 2.2, 0xFF6347);
+        circ.setStrokeStyle(1, 0x000000);
+        circ.setDepth(12);
+        this.grupoEntrega.add(circ);
+      }
+    } else {
+      for (let i = 0; i < 10; i++) {
+        const circ = this.add.circle(ox + 12 + (i % 5) * 4, oy - 8 - Math.floor(i/5) * 4, 2.2, 0xFF6347);
+        circ.setStrokeStyle(1, 0x000000);
+        circ.setDepth(12);
+        this.grupoEntrega.add(circ);
+      }
+      const txt = this.add.text(ox + 12 + 20, oy - 12, '+' + entregadas, { fontSize: '10px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 });
+      txt.setDepth(13);
+      this.grupoEntrega.add(txt);
     }
   }
 
@@ -121,6 +178,12 @@ class JuegoEscena extends Phaser.Scene {
     this.grupoExploradas.clear(true, true);
     this.grupoCamino.clear(true, true);
     this.grupoDebugExtra.clear(true, true);
+    if (this.grupoCarga) this.grupoCarga.clear(true, true);
+    if (this.grupoEntrega) this.grupoEntrega.clear(true, true);
+    this._firmaComida = '';
+    this.dibujarComidas(this.tamanoTile || 32);
+    this.dibujarCarga();
+    this.dibujarEntrega();
     this.actualizarHUD();
   }
 
@@ -145,6 +208,10 @@ class JuegoEscena extends Phaser.Scene {
       aviso = '<div>BFS: sin ruta segura, cruza zona expuesta</div>';
       window._bfsAvisoSeguro = false;
     }
+    let avisoComida = '';
+    if (window.fuentesComida && window.fuentesComida.length === 0) {
+      avisoComida = '<div>No queda comida</div>';
+    }
     hud.innerHTML = '<div>Algoritmo: ' + algo + '</div>' +
                     '<div>Navegacion: ' + (this.modoNavegacion || 'directa') + ' (N)</div>' +
                     '<div>Modo: ' + (this.modoAutonomo ? 'AUTONOMO (M)' : 'MANUAL (M)') + '</div>' +
@@ -159,6 +226,7 @@ class JuegoEscena extends Phaser.Scene {
                     '<div>Shift+Click: destino | Click izq: piedra | Click der: comida</div>' +
                     '<div>R: regenerar | T: mapa prueba</div>' +
                     aviso +
+                    avisoComida +
                     (this.resultadoActual && this.resultadoActual.camino === null ? '<div>sin camino</div>' : '');
   }
 
@@ -301,6 +369,17 @@ class JuegoEscena extends Phaser.Scene {
       if (window.hayComidaEn && window.hayComidaEn(tx, ty)) return;
       if (window.agregarComida) window.agregarComida(tx, ty, 3);
       this.dibujarComidas(t);
+      if (this._firmaComida !== undefined) {
+        let sumaPorciones = 0;
+        let cantFuentes = 0;
+        if (window.fuentesComida) {
+          cantFuentes = window.fuentesComida.length;
+          for (let i = 0; i < window.fuentesComida.length; i++) sumaPorciones += (window.fuentesComida[i].porciones || 0);
+        }
+        this._firmaComida = cantFuentes + '|' + sumaPorciones + '|' + (this.fsm ? this.fsm.llevaComida : false) + '|' + (this.fsm ? this.fsm.comidaEntregada : 0);
+      }
+      this.dibujarCarga();
+      this.dibujarEntrega();
       this.actualizarHUD();
       return;
     }
@@ -461,6 +540,22 @@ class JuegoEscena extends Phaser.Scene {
   }
 
   update(time, delta) {
+    // sincronización por firma
+    let sumaPorciones = 0;
+    let cantFuentes = 0;
+    if (window.fuentesComida) {
+      cantFuentes = window.fuentesComida.length;
+      for (let i = 0; i < window.fuentesComida.length; i++) {
+        sumaPorciones += (window.fuentesComida[i].porciones || 0);
+      }
+    }
+    const firma = cantFuentes + '|' + sumaPorciones + '|' + (this.fsm ? this.fsm.llevaComida : false) + '|' + (this.fsm ? this.fsm.comidaEntregada : 0);
+    if (firma !== this._firmaComida) {
+      this._firmaComida = firma;
+      this.dibujarComidas(this.tamanoTile || 32);
+      this.dibujarCarga();
+      this.dibujarEntrega();
+    }
     if (this.hormiga && window.actualizarHormiga) {
       const casillaAntes = this.hormiga.casilla ? { x: this.hormiga.casilla.x, y: this.hormiga.casilla.y } : null;
       // verificar antes de avanzar
@@ -536,6 +631,17 @@ class JuegoEscena extends Phaser.Scene {
         this.hormigaSprite.y = hv.y;
         this.hormigaSprite.setDepth(100);
       }
+      if (this.grupoCarga && this.grupoCarga.getLength && this.grupoCarga.getLength() > 0) {
+        this.grupoCarga.clear(true, true);
+        if (this.fsm && this.fsm.llevaComida) {
+          const circ = this.add.circle(hv.x, hv.y - 10, 3, 0xFF6347);
+          circ.setStrokeStyle(1, 0x000000);
+          circ.setDepth(150);
+          this.grupoCarga.add(circ);
+        }
+      } else {
+        this.dibujarCarga();
+      }
     }
 
     // FSM autónoma
@@ -559,6 +665,22 @@ class JuegoEscena extends Phaser.Scene {
       }
     }
 
+    // forzar redibujo por firma si cambió
+    let sumaPorciones2 = 0;
+    let cantFuentes2 = 0;
+    if (window.fuentesComida) {
+      cantFuentes2 = window.fuentesComida.length;
+      for (let i = 0; i < window.fuentesComida.length; i++) {
+        sumaPorciones2 += (window.fuentesComida[i].porciones || 0);
+      }
+    }
+    const firma2 = cantFuentes2 + '|' + sumaPorciones2 + '|' + (this.fsm ? this.fsm.llevaComida : false) + '|' + (this.fsm ? this.fsm.comidaEntregada : 0);
+    if (firma2 !== this._firmaComida) {
+      this._firmaComida = firma2;
+      this.dibujarComidas(this.tamanoTile || 32);
+      this.dibujarCarga();
+      this.dibujarEntrega();
+    }
     this.dibujarDebug();
     this.actualizarHUD();
   }
