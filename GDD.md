@@ -36,6 +36,7 @@ No es un juego competitivo: es una simulación interactiva donde el jugador cump
 | `1` / `2` / `3` | Algoritmo de búsqueda: BFS / Dijkstra / A* |
 | `N` | Alternar navegación: ruta directa ↔ ruta segura |
 | `R` | Generar otro escenario |
+| `T` | Cargar mapa de prueba fijo |
 | Clic izquierdo | Poner / sacar una piedra (para bloquear caminos en vivo) |
 | Clic derecho | Dejar una fuente de comida nueva |
 | `D` | Mostrar / ocultar depuración: casillas exploradas por el algoritmo, camino calculado, radio de olfato y estado actual de la hormiga |

@@ -15,36 +15,20 @@ class JuegoEscena extends Phaser.Scene {
       'piedra': 0x2F2F2F
     };
 
-    // Dibujar mapa
-    for (let y = 0; y < window.ALTO; y++) {
-      for (let x = 0; x < window.ANCHO; x++) {
-        const celda = window.mapa[y][x];
-        const color = colores[celda.tipo] || 0x000000;
-        const rect = this.add.rectangle(x * TAMANO_TILE + 16, y * TAMANO_TILE + 16, TAMANO_TILE - 1, TAMANO_TILE - 1, color);
-        rect.setStrokeStyle(1, 0x000000);
-      }
-    }
+    // Grupos propios para poder redibujar sin borrar hormiga/hud
+    this.grupoMapa = this.add.group();
+    this.grupoHormiguero = this.add.group();
+    this.grupoComida = this.add.group();
+    this.grupoExploradas = this.add.group();
+    this.grupoCamino = this.add.group();
 
-    // Hormiguero
-    this.add.rectangle(window.hormiguero.x * 32 + 16, window.hormiguero.y * 32 + 16, 16, 16, 0xFFD700).setStrokeStyle(2, 0x000000);
-
-    // Comida
-    if (window.fuentesComida) {
-      for (let i = 0; i < window.fuentesComida.length; i++) {
-        const c = window.fuentesComida[i];
-        this.add.circle(c.x * 32 + 16, c.y * 32 + 16, 6, 0xFF6347).setStrokeStyle(2, 0x000000);
-      }
-    }
+    this.dibujarTodo(colores, TAMANO_TILE);
 
     // Estado búsqueda
     this.algoritmoActivo = 'bfs';
     this.debugActivo = false;
     this.ultimoDestino = null;
     this.resultadoActual = null;
-
-    // Grupos para debug
-    this.grupoExploradas = this.add.group();
-    this.grupoCamino = this.add.group();
 
     // Hormiga
     this.hormiga = window.crearHormiga ? window.crearHormiga(window.hormiguero.x, window.hormiguero.y) : {
@@ -55,6 +39,7 @@ class JuegoEscena extends Phaser.Scene {
     };
     const hv = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, TAMANO_TILE) : { x: window.hormiguero.x * 32 + 16, y: window.hormiguero.y * 32 + 16 };
     this.hormigaSprite = this.add.rectangle(hv.x, hv.y, 14, 14, 0x000000).setStrokeStyle(2, 0xFFFFFF);
+    this.hormigaSprite.setDepth(100);
 
     this.actualizarHUD();
 
@@ -62,8 +47,69 @@ class JuegoEscena extends Phaser.Scene {
     this.input.on('pointerdown', this.onClick, this);
     this.input.keyboard.on('keydown', this.onKey, this);
 
-    // Tiempo
     this.lastTime = this.time.now;
+
+    // Generar mapa al iniciar si existe generador
+    if (window.generarMapaProcedural && window.mapa && window.hormiguero && window.fuentesComida) {
+      window.generarMapaProcedural(window.ANCHO, window.ALTO, window.mapa, window.hormiguero, window.fuentesComida);
+      this.regenerarVisual();
+    }
+  }
+
+  dibujarTodo(colores, TAMANO_TILE) {
+    this.grupoMapa.clear(true, true);
+    this.grupoHormiguero.clear(true, true);
+    this.grupoComida.clear(true, true);
+    for (let y = 0; y < window.ALTO; y++) {
+      for (let x = 0; x < window.ANCHO; x++) {
+        const celda = window.mapa[y][x];
+        const color = colores[celda.tipo] || 0x000000;
+        const rect = this.add.rectangle(x * TAMANO_TILE + 16, y * TAMANO_TILE + 16, TAMANO_TILE - 1, TAMANO_TILE - 1, color);
+        rect.setStrokeStyle(1, 0x000000);
+        rect.setDepth(0);
+        this.grupoMapa.add(rect);
+      }
+    }
+    const hormiX = window.hormiguero.x * 32 + 16;
+    const hormiY = window.hormiguero.y * 32 + 16;
+    const hrect = this.add.rectangle(hormiX, hormiY, 16, 16, 0xFFD700);
+    hrect.setStrokeStyle(2, 0x000000);
+    hrect.setDepth(10);
+    this.grupoHormiguero.add(hrect);
+    if (window.fuentesComida) {
+      for (let i = 0; i < window.fuentesComida.length; i++) {
+        const c = window.fuentesComida[i];
+        const circ = this.add.circle(c.x * 32 + 16, c.y * 32 + 16, 6, 0xFF6347);
+        circ.setStrokeStyle(2, 0x000000);
+        circ.setDepth(10);
+        this.grupoComida.add(circ);
+      }
+    }
+  }
+
+  regenerarVisual() {
+    const colores = {
+      'tierra': 0x8B7355,
+      'pasto_alto': 0x6B8E23,
+      'barro': 0x654321,
+      'expuesta': 0xD2691E,
+      'piedra': 0x2F2F2F
+    };
+    this.dibujarTodo(colores, this.tamanoTile || 32);
+    if (this.hormiga && window.crearHormiga) {
+      this.hormiga = window.crearHormiga(window.hormiguero.x, window.hormiguero.y);
+      if (this.hormigaSprite) {
+        const hv = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, this.tamanoTile) : { x: window.hormiguero.x * 32 + 16, y: window.hormiguero.y * 32 + 16 };
+        this.hormigaSprite.x = hv.x;
+        this.hormigaSprite.y = hv.y;
+        this.hormigaSprite.setDepth(100);
+      }
+    }
+    this.ultimoDestino = null;
+    this.resultadoActual = null;
+    this.grupoExploradas.clear(true, true);
+    this.grupoCamino.clear(true, true);
+    this.actualizarHUD();
   }
 
   actualizarHUD() {
@@ -85,6 +131,7 @@ class JuegoEscena extends Phaser.Scene {
                     '<div>Exploradas: ' + exploradas + '</div>' +
                     '<div>Hormiga: ' + mov + '</div>' +
                     '<div>Vel: ' + (this.hormiga ? this.hormiga.velocidadSim.toFixed(2) : '1.00') + '</div>' +
+                    '<div>R: regenerar | T: mapa prueba</div>' +
                     (this.resultadoActual && this.resultadoActual.camino === null ? '<div>sin camino</div>' : '');
   }
 
@@ -100,30 +147,30 @@ class JuegoEscena extends Phaser.Scene {
       this.actualizarHUD();
       return;
     }
-    // Camino restante siempre visible
     const restante = window.getCaminoRestante ? window.getCaminoRestante(this.hormiga) : [];
     if (restante && restante.length > 0) {
       for (let i = 0; i < restante.length; i++) {
         const p = restante[i];
         const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 4, t - 4, 0x00FF00, 0.35);
         rect.setStrokeStyle(2, 0x00FF00);
+        rect.setDepth(50);
         this.grupoCamino.add(rect);
       }
     } else if (this.resultadoActual && this.resultadoActual.camino) {
-      // si no hay camino restante pero hay resultado, mostrarlo completo
       for (let i = 0; i < this.resultadoActual.camino.length; i++) {
         const p = this.resultadoActual.camino[i];
         const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 4, t - 4, 0x00FF00, 0.2);
         rect.setStrokeStyle(1, 0x00FF00);
+        rect.setDepth(50);
         this.grupoCamino.add(rect);
       }
     }
 
-    // Exploradas solo con D
     if (this.debugActivo && this.resultadoActual && this.resultadoActual.exploradas) {
       for (let i = 0; i < this.resultadoActual.exploradas.length; i++) {
         const p = this.resultadoActual.exploradas[i];
         const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 8, t - 8, 0x87CEEB, 0.25);
+        rect.setDepth(40);
         this.grupoExploradas.add(rect);
       }
     }
@@ -145,9 +192,11 @@ class JuegoEscena extends Phaser.Scene {
     }
     this.resultadoActual = res;
     if (!res || res.camino === null) {
-      this.hormiga.camino = [];
-      this.hormiga.indiceCamino = 0;
-      this.hormiga.enMovimiento = false;
+      if (this.hormiga) {
+        this.hormiga.camino = [];
+        this.hormiga.indiceCamino = 0;
+        this.hormiga.enMovimiento = false;
+      }
       this.actualizarHUD();
       this.dibujarDebug();
       return;
@@ -164,9 +213,7 @@ class JuegoEscena extends Phaser.Scene {
     const tx = Math.floor(pointer.worldX / t);
     const ty = Math.floor(pointer.worldY / t);
     if (tx < 0 || tx >= window.ANCHO || ty < 0 || ty >= window.ALTO) return;
-    // Clic mientras se mueve: terminar paso actual y recalcular desde esa casilla
     if (this.hormiga && this.hormiga.enMovimiento && !this.hormiga.pausado) {
-      // Completar paso actual moviendo posición lógica
       if (this.hormiga.objetivoPaso) {
         this.hormiga.casilla.x = this.hormiga.objetivoPaso.x;
         this.hormiga.casilla.y = this.hormiga.objetivoPaso.y;
@@ -182,7 +229,6 @@ class JuegoEscena extends Phaser.Scene {
     if (event.key === '1') {
       this.algoritmoActivo = 'bfs';
       if (this.hormiga && this.ultimoDestino) {
-        // recalcular desde su casilla hacia el mismo destino
         this.calcularYCaminarlizar(this.ultimoDestino);
       } else {
         this.actualizarHUD();
@@ -221,6 +267,16 @@ class JuegoEscena extends Phaser.Scene {
         if (this.hormiga.velocidadSim < 0.25) this.hormiga.velocidadSim = 0.25;
       }
       this.actualizarHUD();
+    } else if (event.key === 'r' || event.key === 'R') {
+      if (window.generarMapaProcedural && window.mapa && window.hormiguero && window.fuentesComida) {
+        window.generarMapaProcedural(window.ANCHO, window.ALTO, window.mapa, window.hormiguero, window.fuentesComida);
+      }
+      this.regenerarVisual();
+    } else if (event.key === 't' || event.key === 'T') {
+      if (window.inicializarMapaPrueba) {
+        window.inicializarMapaPrueba();
+      }
+      this.regenerarVisual();
     }
   }
 
@@ -231,9 +287,9 @@ class JuegoEscena extends Phaser.Scene {
       if (this.hormigaSprite) {
         this.hormigaSprite.x = hv.x;
         this.hormigaSprite.y = hv.y;
+        this.hormigaSprite.setDepth(100);
       }
     }
-    // Actualizar debug dibujo para camino restante
     this.dibujarDebug();
     this.actualizarHUD();
   }
