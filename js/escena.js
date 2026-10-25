@@ -15,22 +15,26 @@ class JuegoEscena extends Phaser.Scene {
       'piedra': 0x2F2F2F
     };
 
-    // Grupos propios para poder redibujar sin borrar hormiga/hud
     this.grupoMapa = this.add.group();
     this.grupoHormiguero = this.add.group();
     this.grupoComida = this.add.group();
     this.grupoExploradas = this.add.group();
     this.grupoCamino = this.add.group();
+    this.grupoDebugExtra = this.add.group();
 
     this.dibujarTodo(colores, TAMANO_TILE);
 
-    // Estado búsqueda
     this.algoritmoActivo = 'bfs';
     this.debugActivo = false;
     this.ultimoDestino = null;
     this.resultadoActual = null;
+    this.modoNavegacion = 'directa';
+    this.modoAutonomo = true;
+    if (typeof window !== 'undefined') {
+      window.modoNavegacion = 'directa';
+      window.algoritmoActivo = 'bfs';
+    }
 
-    // Hormiga
     this.hormiga = window.crearHormiga ? window.crearHormiga(window.hormiguero.x, window.hormiguero.y) : {
       casilla: { x: window.hormiguero.x, y: window.hormiguero.y },
       camino: [], indiceCamino: 0, destino: null, enMovimiento: false, pausado: false, velocidadSim: 1.0,
@@ -41,15 +45,16 @@ class JuegoEscena extends Phaser.Scene {
     this.hormigaSprite = this.add.rectangle(hv.x, hv.y, 14, 14, 0x000000).setStrokeStyle(2, 0xFFFFFF);
     this.hormigaSprite.setDepth(100);
 
+    this.fsm = window.crearFSM ? window.crearFSM() : { estado: 'EXPLORAR', energia: 100, llevaComida: false, comidaEntregada: 0, memoriaConocidas: [], memoriaInaccesibles: new Set(), visitadas: new Set() };
+
     this.actualizarHUD();
 
-    // Input
     this.input.on('pointerdown', this.onClick, this);
     this.input.keyboard.on('keydown', this.onKey, this);
+    this.input.mouse.disableContextMenu();
 
     this.lastTime = this.time.now;
 
-    // Generar mapa al iniciar si existe generador
     if (window.generarMapaProcedural && window.mapa && window.hormiguero && window.fuentesComida) {
       window.generarMapaProcedural(window.ANCHO, window.ALTO, window.mapa, window.hormiguero, window.fuentesComida);
       this.regenerarVisual();
@@ -76,6 +81,11 @@ class JuegoEscena extends Phaser.Scene {
     hrect.setStrokeStyle(2, 0x000000);
     hrect.setDepth(10);
     this.grupoHormiguero.add(hrect);
+    this.dibujarComidas(TAMANO_TILE);
+  }
+
+  dibujarComidas(TAMANO_TILE) {
+    this.grupoComida.clear(true, true);
     if (window.fuentesComida) {
       for (let i = 0; i < window.fuentesComida.length; i++) {
         const c = window.fuentesComida[i];
@@ -105,10 +115,12 @@ class JuegoEscena extends Phaser.Scene {
         this.hormigaSprite.setDepth(100);
       }
     }
+    if (this.fsm && window.resetFSM) window.resetFSM(this.fsm);
     this.ultimoDestino = null;
     this.resultadoActual = null;
     this.grupoExploradas.clear(true, true);
     this.grupoCamino.clear(true, true);
+    this.grupoDebugExtra.clear(true, true);
     this.actualizarHUD();
   }
 
@@ -125,19 +137,35 @@ class JuegoEscena extends Phaser.Scene {
       exploradas = this.resultadoActual.exploradas ? this.resultadoActual.exploradas.length : 0;
     }
     const mov = this.hormiga && this.hormiga.enMovimiento && !this.hormiga.pausado ? 'MOVIENDO' : (this.hormiga && this.hormiga.pausado ? 'PAUSADO' : 'QUIETA');
+    const estado = this.fsm ? this.fsm.estado : '-';
+    const energia = this.fsm ? this.fsm.energia : '-';
+    const entregadas = this.fsm ? this.fsm.comidaEntregada : 0;
+    let aviso = '';
+    if (typeof window !== 'undefined' && window._bfsAvisoSeguro) {
+      aviso = '<div>BFS: sin ruta segura, cruza zona expuesta</div>';
+      window._bfsAvisoSeguro = false;
+    }
     hud.innerHTML = '<div>Algoritmo: ' + algo + '</div>' +
+                    '<div>Navegacion: ' + (this.modoNavegacion || 'directa') + ' (N)</div>' +
+                    '<div>Modo: ' + (this.modoAutonomo ? 'AUTONOMO (M)' : 'MANUAL (M)') + '</div>' +
+                    '<div>FSM: ' + estado + '</div>' +
+                    '<div>Energia: ' + energia + '</div>' +
+                    '<div>Comida entregada: ' + entregadas + '</div>' +
                     '<div>Debug (D): ' + (this.debugActivo ? 'ON' : 'OFF') + '</div>' +
                     '<div>Costo camino: ' + costo + '</div>' +
                     '<div>Exploradas: ' + exploradas + '</div>' +
                     '<div>Hormiga: ' + mov + '</div>' +
                     '<div>Vel: ' + (this.hormiga ? this.hormiga.velocidadSim.toFixed(2) : '1.00') + '</div>' +
+                    '<div>Shift+Click: destino | Click izq: piedra | Click der: comida</div>' +
                     '<div>R: regenerar | T: mapa prueba</div>' +
+                    aviso +
                     (this.resultadoActual && this.resultadoActual.camino === null ? '<div>sin camino</div>' : '');
   }
 
   limpiarDebug() {
     this.grupoExploradas.clear(true, true);
     this.grupoCamino.clear(true, true);
+    this.grupoDebugExtra.clear(true, true);
   }
 
   dibujarDebug() {
@@ -147,6 +175,24 @@ class JuegoEscena extends Phaser.Scene {
       this.actualizarHUD();
       return;
     }
+    // Con D, pintar muy tenue las casillas exploradas (FSM)
+    if (this.debugActivo && this.fsm && this.fsm.visitadas) {
+      this.fsm.visitadas.forEach((k) => {
+        const [vx, vy] = k.split(',');
+        const px = parseInt(vx), py = parseInt(vy);
+        const rect = this.add.rectangle(px * t + 16, py * t + 16, t - 6, t - 6, 0x87CEEB, 0.12);
+        rect.setDepth(39);
+        this.grupoExploradas.add(rect);
+      });
+    } else if (this.debugActivo && this.resultadoActual && this.resultadoActual.exploradas) {
+      for (let i = 0; i < this.resultadoActual.exploradas.length; i++) {
+        const p = this.resultadoActual.exploradas[i];
+        const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 8, t - 8, 0x87CEEB, 0.25);
+        rect.setDepth(40);
+        this.grupoExploradas.add(rect);
+      }
+    }
+
     const restante = window.getCaminoRestante ? window.getCaminoRestante(this.hormiga) : [];
     if (restante && restante.length > 0) {
       for (let i = 0; i < restante.length; i++) {
@@ -166,12 +212,38 @@ class JuegoEscena extends Phaser.Scene {
       }
     }
 
-    if (this.debugActivo && this.resultadoActual && this.resultadoActual.exploradas) {
-      for (let i = 0; i < this.resultadoActual.exploradas.length; i++) {
-        const p = this.resultadoActual.exploradas[i];
-        const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 8, t - 8, 0x87CEEB, 0.25);
-        rect.setDepth(40);
-        this.grupoExploradas.add(rect);
+    if (this.debugActivo && window.obtenerVecinasZonasExpuestas) {
+      const set = window.obtenerVecinasZonasExpuestas();
+      set.forEach((k) => {
+        const [cx, cy] = k.split(',');
+        const px = parseInt(cx), py = parseInt(cy);
+        const rect = this.add.rectangle(px * t + 16, py * t + 16, t - 10, t - 10, 0x000000, 0);
+        rect.setStrokeStyle(2, 0xFFFF00);
+        rect.setDepth(45);
+        this.grupoDebugExtra.add(rect);
+      });
+    }
+
+    // radio olfato y fuentes recordadas
+    if (this.debugActivo && this.fsm && this.hormiga) {
+      for (let dy = -4; dy <= 4; dy++) {
+        for (let dx = -4; dx <= 4; dx++) {
+          if (Math.abs(dx) + Math.abs(dy) <= 4) {
+            const rect = this.add.rectangle((this.hormiga.casilla.x + dx) * t + 16, (this.hormiga.casilla.y + dy) * t + 16, t - 12, t - 12, 0x000000, 0);
+            rect.setStrokeStyle(1, 0xFFFFFF);
+            rect.setDepth(43);
+            this.grupoDebugExtra.add(rect);
+          }
+        }
+      }
+      if (this.fsm.memoriaConocidas) {
+        for (let i = 0; i < this.fsm.memoriaConocidas.length; i++) {
+          const fc = this.fsm.memoriaConocidas[i];
+          const rect = this.add.rectangle(fc.x * t + 16, fc.y * t + 16, t - 6, t - 6, 0x000000, 0);
+          rect.setStrokeStyle(2, 0x00FFFF);
+          rect.setDepth(46);
+          this.grupoDebugExtra.add(rect);
+        }
       }
     }
 
@@ -182,13 +254,18 @@ class JuegoEscena extends Phaser.Scene {
     if (!destino || !this.hormiga) return;
     this.ultimoDestino = { x: destino.x, y: destino.y };
     const inicio = { x: this.hormiga.casilla.x, y: this.hormiga.casilla.y };
+    if (typeof window !== 'undefined') {
+      window.modoNavegacion = this.modoNavegacion;
+      window.algoritmoActivo = this.algoritmoActivo;
+      window._bfsAvisoSeguro = false;
+    }
     let res = null;
     if (this.algoritmoActivo === 'bfs') {
-      res = window.bfs(inicio, destino, window.costo);
+      res = window.bfs(inicio, destino, window.costo, 'bfs');
     } else if (this.algoritmoActivo === 'dijkstra') {
-      res = window.dijkstra(inicio, destino, window.costo);
+      res = window.dijkstra(inicio, destino, window.costo, 'dijkstra');
     } else if (this.algoritmoActivo === 'astar') {
-      res = window.astar(inicio, destino, window.costo);
+      res = window.astar(inicio, destino, window.costo, 'astar');
     }
     this.resultadoActual = res;
     if (!res || res.camino === null) {
@@ -196,6 +273,9 @@ class JuegoEscena extends Phaser.Scene {
         this.hormiga.camino = [];
         this.hormiga.indiceCamino = 0;
         this.hormiga.enMovimiento = false;
+      }
+      if (this.fsm) {
+        if (window.marcarInaccesible) window.marcarInaccesible(this.fsm, destino.x, destino.y);
       }
       this.actualizarHUD();
       this.dibujarDebug();
@@ -213,40 +293,118 @@ class JuegoEscena extends Phaser.Scene {
     const tx = Math.floor(pointer.worldX / t);
     const ty = Math.floor(pointer.worldY / t);
     if (tx < 0 || tx >= window.ANCHO || ty < 0 || ty >= window.ALTO) return;
-    if (this.hormiga && this.hormiga.enMovimiento && !this.hormiga.pausado) {
-      if (this.hormiga.objetivoPaso) {
-        this.hormiga.casilla.x = this.hormiga.objetivoPaso.x;
-        this.hormiga.casilla.y = this.hormiga.objetivoPaso.y;
-        this.hormiga.indiceCamino++;
-      }
-      this.hormiga.tPaso = 0;
-      this.hormiga.enMovimiento = false;
+    if (pointer.rightButtonDown && pointer.button === 2) {
+      if (window.esTransitable && !window.esTransitable(tx, ty)) return;
+      if (window.mapa && window.mapa[ty] && window.mapa[ty][tx].tipo === 'piedra') return;
+      if (window.hormiguero && window.hormiguero.x === tx && window.hormiguero.y === ty) return;
+      if (this.hormiga && this.hormiga.casilla && this.hormiga.casilla.x === tx && this.hormiga.casilla.y === ty) return;
+      if (window.hayComidaEn && window.hayComidaEn(tx, ty)) return;
+      if (window.agregarComida) window.agregarComida(tx, ty, 3);
+      this.dibujarComidas(t);
+      this.actualizarHUD();
+      return;
     }
-    this.calcularYCaminarlizar({ x: tx, y: ty });
+    const shift = pointer.event && pointer.event.shiftKey;
+    if (shift) {
+      if (this.hormiga && this.hormiga.enMovimiento && !this.hormiga.pausado) {
+        if (this.hormiga.objetivoPaso) {
+          this.hormiga.casilla.x = this.hormiga.objetivoPaso.x;
+          this.hormiga.casilla.y = this.hormiga.objetivoPaso.y;
+          this.hormiga.indiceCamino++;
+        }
+        this.hormiga.tPaso = 0;
+        this.hormiga.enMovimiento = false;
+      }
+      this.calcularYCaminarlizar({ x: tx, y: ty });
+      return;
+    }
+    if (window.esBorde && window.esBorde(tx, ty)) return;
+    if (this.hormiga && this.hormiga.casilla && this.hormiga.casilla.x === tx && this.hormiga.casilla.y === ty) return;
+    if (this.hormiga && this.hormiga.objetivoPaso && this.hormiga.enMovimiento && !this.hormiga.pausado && this.hormiga.objetivoPaso.x === tx && this.hormiga.objetivoPaso.y === ty) return;
+    if (window.hormiguero && window.hormiguero.x === tx && window.hormiguero.y === ty) return;
+    if (window.hayComidaEn && window.hayComidaEn(tx, ty)) return;
+    if (window.mapa && window.mapa[ty] && window.mapa[ty][tx].tipo === 'piedra') {
+      if (window.quitarPiedra) window.quitarPiedra(tx, ty);
+    } else {
+      if (window.ponerPiedra) window.ponerPiedra(tx, ty);
+    }
+    if (this.fsm && window.limpiarInaccesibles) {
+      window.limpiarInaccesibles(this.fsm);
+      if (this.fsm.esperandoSinObjetivo && this.modoAutonomo && window.actualizarFSM) {
+        const resF = window.actualizarFSM(this.fsm, this.hormiga, { mapa: window.mapa, hormiguero: window.hormiguero, fuentesComida: window.fuentesComida, ANCHO: window.ANCHO, ALTO: window.ALTO, modoAutonomo: this.modoAutonomo });
+        if (resF && resF.destino) this.calcularYCaminarlizar(resF.destino);
+      }
+    }
+    const colores = {
+      'tierra': 0x8B7355,
+      'pasto_alto': 0x6B8E23,
+      'barro': 0x654321,
+      'expuesta': 0xD2691E,
+      'piedra': 0x2F2F2F
+    };
+    this.dibujarTodo(colores, t);
+    this.dibujarDebug();
+    this.actualizarHUD();
   }
 
   onKey(event) {
     if (event.key === '1') {
       this.algoritmoActivo = 'bfs';
-      if (this.hormiga && this.ultimoDestino) {
+      if (typeof window !== 'undefined') window.algoritmoActivo = 'bfs';
+      if (this.hormiga && this.ultimoDestino && !this.modoAutonomo) {
         this.calcularYCaminarlizar(this.ultimoDestino);
       } else {
         this.actualizarHUD();
       }
     } else if (event.key === '2') {
       this.algoritmoActivo = 'dijkstra';
-      if (this.hormiga && this.ultimoDestino) {
+      if (typeof window !== 'undefined') window.algoritmoActivo = 'dijkstra';
+      if (this.hormiga && this.ultimoDestino && !this.modoAutonomo) {
         this.calcularYCaminarlizar(this.ultimoDestino);
       } else {
         this.actualizarHUD();
       }
     } else if (event.key === '3') {
       this.algoritmoActivo = 'astar';
-      if (this.hormiga && this.ultimoDestino) {
+      if (typeof window !== 'undefined') window.algoritmoActivo = 'astar';
+      if (this.hormiga && this.ultimoDestino && !this.modoAutonomo) {
         this.calcularYCaminarlizar(this.ultimoDestino);
       } else {
         this.actualizarHUD();
       }
+    } else if (event.key === 'n' || event.key === 'N') {
+      this.modoNavegacion = this.modoNavegacion === 'directa' ? 'segura' : 'directa';
+      if (typeof window !== 'undefined') window.modoNavegacion = this.modoNavegacion;
+      if (this.hormiga && this.ultimoDestino && !this.modoAutonomo) {
+        this.calcularYCaminarlizar(this.ultimoDestino);
+      } else {
+        this.actualizarHUD();
+      }
+    } else if (event.key === 'm' || event.key === 'M') {
+      this.modoAutonomo = !this.modoAutonomo;
+    if (this.modoAutonomo && this.fsm) {
+      if (window.resetFSM) {
+        window.resetFSM(this.fsm);
+        if (this.fsm.visitadas && this.hormiga && this.hormiga.casilla) {
+          for (let dy = -4; dy <= 4; dy++) {
+            for (let dx = -4; dx <= 4; dx++) {
+              if (Math.abs(dx) + Math.abs(dy) > 4) continue;
+              this.fsm.visitadas.add((this.hormiga.casilla.x + dx) + ',' + (this.hormiga.casilla.y + dy));
+            }
+          }
+        }
+      }
+      if (this.hormiga && window.crearHormiga) {
+        this.hormiga = window.crearHormiga(window.hormiguero.x, window.hormiguero.y);
+        if (this.hormigaSprite) {
+          const hv2 = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, this.tamanoTile) : { x: window.hormiguero.x * 32 + 16, y: window.hormiguero.y * 32 + 16 };
+          this.hormigaSprite.x = hv2.x; this.hormigaSprite.y = hv2.y; this.hormigaSprite.setDepth(100);
+        }
+      }
+      this.ultimoDestino = null;
+      this.resultadoActual = null;
+    }
+      this.actualizarHUD();
     } else if (event.key === 'd' || event.key === 'D') {
       this.debugActivo = !this.debugActivo;
       this.dibujarDebug();
@@ -271,10 +429,32 @@ class JuegoEscena extends Phaser.Scene {
       if (window.generarMapaProcedural && window.mapa && window.hormiguero && window.fuentesComida) {
         window.generarMapaProcedural(window.ANCHO, window.ALTO, window.mapa, window.hormiguero, window.fuentesComida);
       }
+      if (this.fsm && window.resetFSM) {
+        window.resetFSM(this.fsm);
+        if (this.fsm.visitadas && this.hormiga && this.hormiga.casilla) {
+          for (let dy = -4; dy <= 4; dy++) {
+            for (let dx = -4; dx <= 4; dx++) {
+              if (Math.abs(dx) + Math.abs(dy) > 4) continue;
+              this.fsm.visitadas.add((this.hormiga.casilla.x + dx) + ',' + (this.hormiga.casilla.y + dy));
+            }
+          }
+        }
+      }
       this.regenerarVisual();
     } else if (event.key === 't' || event.key === 'T') {
       if (window.inicializarMapaPrueba) {
         window.inicializarMapaPrueba();
+      }
+      if (this.fsm && window.resetFSM) {
+        window.resetFSM(this.fsm);
+        if (this.fsm.visitadas && this.hormiga && this.hormiga.casilla) {
+          for (let dy = -4; dy <= 4; dy++) {
+            for (let dx = -4; dx <= 4; dx++) {
+              if (Math.abs(dx) + Math.abs(dy) > 4) continue;
+              this.fsm.visitadas.add((this.hormiga.casilla.x + dx) + ',' + (this.hormiga.casilla.y + dy));
+            }
+          }
+        }
       }
       this.regenerarVisual();
     }
@@ -282,7 +462,74 @@ class JuegoEscena extends Phaser.Scene {
 
   update(time, delta) {
     if (this.hormiga && window.actualizarHormiga) {
+      const casillaAntes = this.hormiga.casilla ? { x: this.hormiga.casilla.x, y: this.hormiga.casilla.y } : null;
+      // verificar antes de avanzar
+      if (this.hormiga.enMovimiento && !this.hormiga.pausado && this.hormiga.camino && this.hormiga.indiceCamino < this.hormiga.camino.length) {
+        const sig = this.hormiga.camino[this.hormiga.indiceCamino];
+        if (sig && window.esTransitable && !window.esTransitable(sig.x, sig.y)) {
+          if (this.ultimoDestino && !this.modoAutonomo) {
+            this.calcularYCaminarlizar(this.ultimoDestino);
+            window.actualizarHormiga(this.hormiga, delta, window.costo);
+            const hv = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, this.tamanoTile) : { x: this.hormiga.casilla.x * 32 + 16, y: this.hormiga.casilla.y * 32 + 16 };
+            if (this.hormigaSprite) { this.hormigaSprite.x = hv.x; this.hormigaSprite.y = hv.y; this.hormigaSprite.setDepth(100); }
+            this.dibujarDebug();
+            this.actualizarHUD();
+            return;
+          } else if (this.modoAutonomo) {
+            if (this.fsm && window.marcarInaccesible) window.marcarInaccesible(this.fsm, this.ultimoDestino ? this.ultimoDestino.x : sig.x, this.ultimoDestino ? this.ultimoDestino.y : sig.y);
+            this.hormiga.enMovimiento = false;
+            this.hormiga.camino = [];
+            // no frenar si transitable - only if blocked
+          } else {
+            this.hormiga.enMovimiento = false;
+            this.hormiga.camino = [];
+          }
+        }
+        // if transitable, do nothing special
+      }
       window.actualizarHormiga(this.hormiga, delta, window.costo);
+      // bajar energia UNA SOLA VEZ por casilla completada
+      if (this.fsm && window.bajarEnergia && casillaAntes && this.hormiga.casilla) {
+        if (casillaAntes.x !== this.hormiga.casilla.x || casillaAntes.y !== this.hormiga.casilla.y) {
+          const cst = window.costo ? window.costo(this.hormiga.casilla.x, this.hormiga.casilla.y) : 1;
+          window.bajarEnergia(this.fsm, cst);
+          // marcar radio 4 como explorado SOLO al pisar casilla completada
+          if (this.fsm.visitadas) {
+            for (let dy = -4; dy <= 4; dy++) {
+              for (let dx = -4; dx <= 4; dx++) {
+                if (Math.abs(dx) + Math.abs(dy) > 4) continue;
+                this.fsm.visitadas.add((this.hormiga.casilla.x + dx) + ',' + (this.hormiga.casilla.y + dy));
+              }
+            }
+          }
+          // olfato al completar casilla en EXPLORAR
+          if (this.modoAutonomo && this.fsm.estado === 'EXPLORAR' && window.olfatear && window.elegirComida) {
+            window.olfatear(this.fsm, this.hormiga, window.fuentesComida);
+            const comida = window.elegirComida(this.fsm, this.hormiga, window.fuentesComida);
+            if (comida) {
+              this.hormiga.enMovimiento = false;
+              this.hormiga.camino = [];
+              this.hormiga.indiceCamino = 0;
+              const ant = this.fsm.estado;
+              this.fsm.estado = 'IR_A_LA_COMIDA';
+              this.fsm.destinoActual = { x: comida.x, y: comida.y };
+              this.fsm.destinoActualRef = comida;
+              if (window.fsm && window.fsm.logCambioEstado) {
+                // no direct access, use console
+              }
+              try { console.log('FSM cambio:', ant, '->', this.fsm.estado, '| energia:', this.fsm.energia, '| llevaComida:', this.fsm.llevaComida); } catch(e){}
+              this.ultimoDestino = { x: comida.x, y: comida.y };
+              if (typeof window !== 'undefined') { window.modoNavegacion = this.modoNavegacion; window.algoritmoActivo = this.algoritmoActivo; window._bfsAvisoSeguro = false; }
+              let res = null;
+              if (this.algoritmoActivo === 'bfs') res = window.bfs(this.hormiga.casilla, comida, window.costo, 'bfs');
+              else if (this.algoritmoActivo === 'dijkstra') res = window.dijkstra(this.hormiga.casilla, comida, window.costo, 'dijkstra');
+              else if (this.algoritmoActivo === 'astar') res = window.astar(this.hormiga.casilla, comida, window.costo, 'astar');
+              this.resultadoActual = res;
+              if (res && res.camino && window.iniciarCamino) window.iniciarCamino(this.hormiga, res.camino);
+            }
+          }
+        }
+      }
       const hv = window.obtenerPosicionVisual ? window.obtenerPosicionVisual(this.hormiga, this.tamanoTile) : { x: this.hormiga.casilla.x * 32 + 16, y: this.hormiga.casilla.y * 32 + 16 };
       if (this.hormigaSprite) {
         this.hormigaSprite.x = hv.x;
@@ -290,6 +537,28 @@ class JuegoEscena extends Phaser.Scene {
         this.hormigaSprite.setDepth(100);
       }
     }
+
+    // FSM autónoma
+    if (this.modoAutonomo && this.fsm && window.actualizarFSM) {
+      if (!this.hormiga.enMovimiento) {
+        if (this.fsm.memoriaConocidas && this.fsm.memoriaConocidas.length === 0) {
+          if (window.olfatear) window.olfatear(this.fsm, this.hormiga, window.fuentesComida);
+        }
+      }
+      const resF = window.actualizarFSM(this.fsm, this.hormiga, { mapa: window.mapa, hormiguero: window.hormiguero, fuentesComida: window.fuentesComida, ANCHO: window.ANCHO, ALTO: window.ALTO, modoAutonomo: this.modoAutonomo }, delta);
+      if (resF && resF.destino && !this.hormiga.enMovimiento) {
+        this.ultimoDestino = { x: resF.destino.x, y: resF.destino.y };
+        if (typeof window !== 'undefined') { window.modoNavegacion = this.modoNavegacion; window.algoritmoActivo = this.algoritmoActivo; window._bfsAvisoSeguro = false; }
+        let res = null;
+        if (this.algoritmoActivo === 'bfs') res = window.bfs(this.hormiga.casilla, resF.destino, window.costo, 'bfs');
+        else if (this.algoritmoActivo === 'dijkstra') res = window.dijkstra(this.hormiga.casilla, resF.destino, window.costo, 'dijkstra');
+        else if (this.algoritmoActivo === 'astar') res = window.astar(this.hormiga.casilla, resF.destino, window.costo, 'astar');
+        this.resultadoActual = res;
+        if (res && res.camino && window.iniciarCamino) window.iniciarCamino(this.hormiga, res.camino);
+        else if (res && res.camino === null && this.fsm) { if (window.marcarInaccesible) window.marcarInaccesible(this.fsm, resF.destino.x, resF.destino.y); }
+      }
+    }
+
     this.dibujarDebug();
     this.actualizarHUD();
   }

@@ -35,11 +35,13 @@ No es un juego competitivo: es una simulación interactiva donde el jugador cump
 |---|---|
 | `1` / `2` / `3` | Algoritmo de búsqueda: BFS / Dijkstra / A* |
 | `N` | Alternar navegación: ruta directa ↔ ruta segura |
+| `M` | Alternar modo autónomo/manual |
 | `R` | Generar otro escenario |
 | `T` | Cargar mapa de prueba fijo |
-| Clic izquierdo | Poner / sacar una piedra (para bloquear caminos en vivo) |
-| Clic derecho | Dejar una fuente de comida nueva |
-| `D` | Mostrar / ocultar depuración: casillas exploradas por el algoritmo, camino calculado, radio de olfato y estado actual de la hormiga |
+| Shift + Clic izquierdo | Dar destino a la hormiga (prueba/manual) |
+| Clic izquierdo | Poner / sacar una piedra (para bloquear caminos en vivo). No se puede poner en borde, hormiga, casilla destino en movimiento, hormiguero ni comida |
+| Clic derecho | Dejar una fuente de comida nueva (solo en casilla transitable sin comida, hormiga ni hormiguero) |
+| `D` | Mostrar / ocultar depuración: casillas exploradas por el algoritmo, camino calculado, radio de olfato y estado actual de la hormiga. Marca vecinas penalizadas de zonas expuestas |
 | `Espacio` | Pausa |
 | `+` / `-` | Velocidad de la simulación |
 

@@ -5,20 +5,68 @@ function manhattan(a, b) {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
-function bfs(inicio, destino, getCosto) {
-  // getCosto recibido pero ignorado (BFS no usa costos)
+function esZonasExpuesta(x, y) {
+  if (typeof window === 'undefined') return false;
+  if (!window.mapa || !window.mapa[y]) return false;
+  return window.mapa[y][x] && window.mapa[y][x].tipo === 'expuesta';
+}
+
+function esVecinaZonaExpuesta(x, y) {
+  if (typeof window === 'undefined') return false;
+  if (!window.mapa) return false;
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let d = 0; d < dirs.length; d++) {
+    const nx = x + dirs[d][0], ny = y + dirs[d][1];
+    if (nx >= 0 && ny >= 0 && window.mapa[ny] && window.mapa[ny][nx] && window.mapa[ny][nx].tipo === 'expuesta') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function costoDirecto(x, y) {
+  if (typeof window !== 'undefined' && window.costo) {
+    return window.costo(x, y);
+  }
+  return 1;
+}
+
+function costoSeguro(x, y, algoritmo) {
+  if (typeof window === 'undefined') return 1;
+  if (!window.mapa || !window.mapa[y]) return Infinity;
+  if (window.mapa[y][x].tipo === 'piedra') return Infinity;
+  if (window.esTransitable && !window.esTransitable(x, y)) return Infinity;
+  if (algoritmo === 'bfs') {
+    if (esZonasExpuesta(x, y)) return Infinity;
+    return 1;
+  }
+  let c = (window.costo) ? window.costo(x, y) : 1;
+  if (c === Infinity) return Infinity;
+  if (esZonasExpuesta(x, y)) {
+    c = c + 20;
+  } else if (esVecinaZonaExpuesta(x, y)) {
+    c = c + 5;
+  }
+  return c;
+}
+
+function bfs(inicio, destino, getCosto, algoritmo) {
+  const algo = algoritmo || (typeof window !== 'undefined' && window.algoritmoActivo ? window.algoritmoActivo : 'bfs');
+  const modo = (typeof window !== 'undefined' && window.modoNavegacion) ? window.modoNavegacion : 'directa';
   if (!inicio || !destino) return { camino: null, exploradas: [] };
   if (inicio.x === destino.x && inicio.y === destino.y) {
     return { camino: [{ x: inicio.x, y: inicio.y }], exploradas: [{ x: inicio.x, y: inicio.y }] };
   }
   if (typeof window !== 'undefined' && window.esTransitable) {
     if (!window.esTransitable(destino.x, destino.y)) {
-      // verificar si es piedra
       if (window.mapa && window.mapa[destino.y] && window.mapa[destino.y][destino.x] && window.mapa[destino.y][destino.x].tipo === 'piedra') {
         return { camino: null, exploradas: [] };
       }
     }
   }
+
+  let usarCostoSeguro = false;
+  if (modo === 'segura') usarCostoSeguro = true;
 
   const visitados = new Set();
   const padre = new Map();
@@ -38,20 +86,30 @@ function bfs(inicio, destino, getCosto) {
     for (let i = 0; i < vecinos.length; i++) {
       const n = vecinos[i];
       const k = n.x + ',' + n.y;
-      if (!visitados.has(k)) {
-        visitados.add(k);
-        padre.set(k, actual.x + ',' + actual.y);
-        cola.push(n);
+      if (visitados.has(k)) continue;
+      if (usarCostoSeguro) {
+        const cc = costoSeguro(n.x, n.y, 'bfs');
+        if (cc === Infinity) continue;
       }
+      visitados.add(k);
+      padre.set(k, actual.x + ',' + actual.y);
+      cola.push(n);
     }
   }
 
   const keyDestino = destino.x + ',' + destino.y;
   if (!visitados.has(keyDestino)) {
+    if (usarCostoSeguro) {
+      // reintentar con costo directo
+      if (typeof window !== 'undefined') window._bfsAvisoSeguro = true;
+      // intentar con directo
+      const res2 = bfsDirecto(inicio, destino);
+      if (res2.camino) return res2;
+      return { camino: null, exploradas: exploradas };
+    }
     return { camino: null, exploradas: exploradas };
   }
 
-  // reconstruir camino
   const camino = [];
   let cur = keyDestino;
   const temp = [];
@@ -66,11 +124,63 @@ function bfs(inicio, destino, getCosto) {
   return { camino: camino, exploradas: exploradas };
 }
 
-function dijkstra(inicio, destino, getCosto) {
+function bfsDirecto(inicio, destino) {
   if (!inicio || !destino) return { camino: null, exploradas: [] };
-  const costoFn = getCosto || ((typeof window !== 'undefined' && window.costo) ? window.costo : () => 1);
   if (inicio.x === destino.x && inicio.y === destino.y) {
     return { camino: [{ x: inicio.x, y: inicio.y }], exploradas: [{ x: inicio.x, y: inicio.y }] };
+  }
+  const visitados = new Set();
+  const padre = new Map();
+  const cola = [];
+  const exploradas = [];
+  const keyInicio = inicio.x + ',' + inicio.y;
+  visitados.add(keyInicio);
+  cola.push({ x: inicio.x, y: inicio.y });
+  padre.set(keyInicio, null);
+  while (cola.length > 0) {
+    const actual = cola.shift();
+    exploradas.push({ x: actual.x, y: actual.y });
+    if (actual.x === destino.x && actual.y === destino.y) break;
+    const vecinos = (typeof window !== 'undefined' && window.vecinos) ? window.vecinos(actual.x, actual.y) : [];
+    for (let i = 0; i < vecinos.length; i++) {
+      const n = vecinos[i];
+      const k = n.x + ',' + n.y;
+      if (!visitados.has(k)) {
+        visitados.add(k);
+        padre.set(k, actual.x + ',' + actual.y);
+        cola.push(n);
+      }
+    }
+  }
+  const keyDestino = destino.x + ',' + destino.y;
+  if (!visitados.has(keyDestino)) return { camino: null, exploradas: exploradas };
+  const camino = [];
+  let cur = keyDestino;
+  const temp = [];
+  while (cur !== null) {
+    const [cx, cy] = cur.split(',');
+    temp.push({ x: parseInt(cx), y: parseInt(cy) });
+    if (cur === keyInicio) break;
+    cur = padre.get(cur);
+  }
+  temp.reverse();
+  camino.push(...temp);
+  return { camino: camino, exploradas: exploradas };
+}
+
+function dijkstra(inicio, destino, getCosto, algoritmo) {
+  const algo = algoritmo || (typeof window !== 'undefined' && window.algoritmoActivo ? window.algoritmoActivo : 'dijkstra');
+  const modo = (typeof window !== 'undefined' && window.modoNavegacion) ? window.modoNavegacion : 'directa';
+  if (!inicio || !destino) return { camino: null, exploradas: [] };
+  if (inicio.x === destino.x && inicio.y === destino.y) {
+    return { camino: [{ x: inicio.x, y: inicio.y }], exploradas: [{ x: inicio.x, y: inicio.y }] };
+  }
+
+  let costoFn;
+  if (modo === 'segura') {
+    costoFn = function(x,y) { return costoSeguro(x,y, algo); };
+  } else {
+    costoFn = getCosto || ((typeof window !== 'undefined' && window.costo) ? window.costo : () => 1);
   }
 
   const visitados = new Set();
@@ -82,12 +192,10 @@ function dijkstra(inicio, destino, getCosto) {
   dist.set(keyInicio, 0);
   padre.set(keyInicio, null);
 
-  // cola simple con menor distancia
   const open = [{ x: inicio.x, y: inicio.y, d: 0 }];
   visitados.add(keyInicio);
 
   while (open.length > 0) {
-    // encontrar con menor d
     let mejorIdx = 0;
     for (let i = 1; i < open.length; i++) {
       if (open[i].d < open[mejorIdx].d) mejorIdx = i;
@@ -113,27 +221,11 @@ function dijkstra(inicio, destino, getCosto) {
   }
 
   const keyDestino = destino.x + ',' + destino.y;
-  if (!dist.has(keyDestino) && !(destino.x === inicio.x && destino.y === inicio.y)) {
-    // verificar si fue visitado
-  }
-  if (!padre.has(keyDestino) && !(destino.x === inicio.x && destino.y === inicio.y)) {
-    // revisar si llegamos
-  }
-  // si no hay padre hacia destino y no es inicio, null
-  if (!(destino.x === inicio.x && destino.y === inicio.y)) {
-    // buscar si destino fue alcanzado
-    let encontrado = false;
-    for (let i = 0; i < open.length; i++) {
-      if (open[i].x === destino.x && open[i].y === destino.y) { encontrado = true; break; }
+  if (!padre.has(keyDestino)) {
+    if (modo === 'segura') {
+      if (typeof window !== 'undefined') window._bfsAvisoSeguro = true;
+      return dijkstra(inicio, destino, getCosto, algo);
     }
-    // reconstruir si padre existe
-  }
-  if (!(destino.x === inicio.x && destino.y === inicio.y) && !padre.has(keyDestino)) {
-    // intentar ver si exploramos hasta él
-  }
-
-  // reconstrucción más directa
-  if (!padre.has(keyDestino) && !(destino.x === inicio.x && destino.y === inicio.y)) {
     return { camino: null, exploradas: exploradas };
   }
 
@@ -154,11 +246,19 @@ function dijkstra(inicio, destino, getCosto) {
   return { camino: camino, exploradas: exploradas };
 }
 
-function astar(inicio, destino, getCosto) {
+function astar(inicio, destino, getCosto, algoritmo) {
+  const algo = algoritmo || (typeof window !== 'undefined' && window.algoritmoActivo ? window.algoritmoActivo : 'astar');
+  const modo = (typeof window !== 'undefined' && window.modoNavegacion) ? window.modoNavegacion : 'directa';
   if (!inicio || !destino) return { camino: null, exploradas: [] };
-  const costoFn = getCosto || ((typeof window !== 'undefined' && window.costo) ? window.costo : () => 1);
   if (inicio.x === destino.x && inicio.y === destino.y) {
     return { camino: [{ x: inicio.x, y: inicio.y }], exploradas: [{ x: inicio.x, y: inicio.y }] };
+  }
+
+  let costoFn;
+  if (modo === 'segura') {
+    costoFn = function(x,y) { return costoSeguro(x,y, algo); };
+  } else {
+    costoFn = getCosto || ((typeof window !== 'undefined' && window.costo) ? window.costo : () => 1);
   }
 
   const visitados = new Set();
@@ -200,6 +300,10 @@ function astar(inicio, destino, getCosto) {
   }
 
   if (!padre.has(keyDestino)) {
+    if (modo === 'segura') {
+      if (typeof window !== 'undefined') window._bfsAvisoSeguro = true;
+      return astar(inicio, destino, getCosto, algo);
+    }
     return { camino: null, exploradas: exploradas };
   }
 
@@ -236,4 +340,6 @@ if (typeof window !== 'undefined') {
   window.dijkstra = dijkstra;
   window.astar = astar;
   window.calcularCostoCamino = calcularCostoCamino;
+  window.costoDirecto = costoDirecto;
+  window.costoSeguro = costoSeguro;
 }

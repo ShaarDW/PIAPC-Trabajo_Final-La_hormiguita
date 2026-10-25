@@ -12,7 +12,7 @@ Que la hormiga decida sola: explore, huela comida, la recuerde, la lleve al horm
 - **Energía:** 100 al inicio; baja según el costo de cada casilla pisada. Umbral bajo: 30.
 
 ### Estados
-- **EXPLORAR:** elige un punto transitable no visitado, alcanzable, preferentemente lejos de lo visitado; va hacia él. Al llegar, elige otro. Si huele o recuerda comida → IR A LA COMIDA.
+- **EXPLORAR:** en cada paso se marcan **todas las casillas dentro del radio de olfato** (Manhattan 4) como exploradas. El punto se elige entre casillas transitables **no exploradas** a distancia Manhattan **entre 5 y 10** de la hormiga, al azar entre candidatas alcanzables (máximo 10 intentos). Si no hay candidatas en ese rango, se amplía a cualquier distancia; si no queda nada sin explorar, se limpian las visitadas. Al completar cada casilla en EXPLORAR se hace **olfato** y si hay comida a Manhattan <= 4 se corta el camino actual y pasa a **IR A LA COMIDA** inmediatamente. Si huele o recuerda comida → IR A LA COMIDA.
 - **IR A LA COMIDA:** entre las fuentes conocidas y accesibles, elige la de mejor `porciones / costo del camino`. Al llegar → RECOGER. Si la fuente ya no existe o no tiene camino, la marca y elige otra; si no queda ninguna → EXPLORAR.
 - **RECOGER:** pausa breve, toma 1 porción (la fuente baja una porción; desaparece en 0) → VOLVER AL HORMIGUERO.
 - **VOLVER AL HORMIGUERO:** ruta al hormiguero con algoritmo y navegación activos. Al llegar → DESCANSAR.
