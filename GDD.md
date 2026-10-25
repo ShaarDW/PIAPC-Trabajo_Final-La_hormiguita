@@ -1,9 +1,9 @@
 # GDD — Hormiga recolectora
 
 **Materia:** Programación de IA y Patrones de Comportamiento (PIAPC) — TP final integrador
-**Integrante:** Juan Thiago [apellido] (individual)
+**Integrante:** Juan Thiago Alfaro (individual)
 **Tecnología:** JavaScript + Phaser 4, ejecutable en el navegador
-**Repositorio:** [URL del repositorio público]
+**Repositorio:** https://github.com/ShaarDW/PIAPC-Trabajo_Final-La_hormiguita
 
 ---
 
