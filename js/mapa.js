@@ -49,6 +49,33 @@ function inicializarMapaPrueba() {
     mapa[8][16] = { tipo: TIPO.BARRO, costo: 5 };
     mapa[9][15] = { tipo: TIPO.BARRO, costo: 5 };
   }
+
+  // Franja de barro entre hormiguero y comida para ver diferencia BFS vs Dijkstra/A*
+  if (ANCHO > 14 && ALTO > 6) {
+    // Limpiar un poco alrededor para asegurar rodeo por tierra
+    mapa[6][10] = { tipo: TIPO.TIERRA, costo: 1 };
+    mapa[6][11] = { tipo: TIPO.TIERRA, costo: 1 };
+    mapa[6][12] = { tipo: TIPO.TIERRA, costo: 1 };
+    mapa[6][13] = { tipo: TIPO.TIERRA, costo: 1 };
+    mapa[7][10] = { tipo: TIPO.TIERRA, costo: 1 };
+    mapa[7][11] = { tipo: TIPO.TIERRA, costo: 1 };
+    mapa[7][12] = { tipo: TIPO.TIERRA, costo: 1 };
+    mapa[7][13] = { tipo: TIPO.TIERRA, costo: 1 };
+    // Franja de barro 2 casillas de ancho
+    mapa[8][10] = { tipo: TIPO.BARRO, costo: 5 };
+    mapa[8][11] = { tipo: TIPO.BARRO, costo: 5 };
+    mapa[8][12] = { tipo: TIPO.BARRO, costo: 5 };
+    mapa[8][13] = { tipo: TIPO.BARRO, costo: 5 };
+    mapa[9][10] = { tipo: TIPO.BARRO, costo: 5 };
+    mapa[9][11] = { tipo: TIPO.BARRO, costo: 5 };
+    mapa[9][12] = { tipo: TIPO.BARRO, costo: 5 };
+    mapa[9][13] = { tipo: TIPO.BARRO, costo: 5 };
+    // Mover una comida para que quede al otro lado de la franja
+    fuentesComida = [
+      { x: 12, y: 10, porciones: 3 },
+      { x: 20, y: 5, porciones: 2 }
+    ];
+  }
   
   // Zona expuesta
   if (ANCHO > 12 && ALTO > 10) {
