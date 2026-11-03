@@ -38,7 +38,7 @@ No es un juego competitivo: es una simulación interactiva donde el jugador cump
 | `M` | Alternar modo autónomo/manual |
 | `R` | Generar otro escenario |
 | `T` | Cargar mapa de prueba fijo |
-| Shift + Clic izquierdo | Dar destino a la hormiga (prueba/manual) |
+| Shift + Clic izquierdo | Dar destino a la hormiga. Si está en modo autónomo, primero pasa a manual (el HUD muestra MANUAL) y la FSM queda detenida |
 | Clic izquierdo | Poner / sacar una piedra (para bloquear caminos en vivo). No se puede poner en borde, hormiga, casilla destino en movimiento, hormiguero ni comida |
 | Clic derecho | Dejar una fuente de comida nueva (solo en casilla transitable sin comida, hormiga ni hormiguero) |
 | `D` | Mostrar / ocultar depuración: casillas exploradas por el algoritmo, camino calculado, radio de olfato y estado actual de la hormiga. Marca vecinas penalizadas de zonas expuestas |

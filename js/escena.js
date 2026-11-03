@@ -383,10 +383,9 @@ class JuegoEscena extends Phaser.Scene {
     this.actualizarHUD();
   }
 
-  calcularYCaminarlizar(destino) {
-    if (!destino || !this.hormiga) return;
-    this.ultimoDestino = { x: destino.x, y: destino.y };
-    const inicio = { x: this.hormiga.casilla.x, y: this.hormiga.casilla.y };
+  buscarCamino(inicio, destino, solicitante) {
+    if (!inicio || !destino) return null;
+    const pedido = solicitante || 'manual';
     if (typeof window !== 'undefined') {
       window.modoNavegacion = this.modoNavegacion;
       window.algoritmoActivo = this.algoritmoActivo;
@@ -400,7 +399,21 @@ class JuegoEscena extends Phaser.Scene {
     } else if (this.algoritmoActivo === 'astar') {
       res = window.astar(inicio, destino, window.costo, 'astar');
     }
+    const costo = res && res.camino ? (window.calcularCostoCamino ? window.calcularCostoCamino(res.camino, window.costo) : 0) : null;
+    const exploradas = res && res.exploradas ? res.exploradas.length : 0;
+    try {
+      console.log('[camino]', pedido, '| algoritmo:', this.algoritmoActivo, '| navegacion:', this.modoNavegacion, '| origen:', inicio.x + ',' + inicio.y, '| destino:', destino.x + ',' + destino.y, '| costo:', costo, '| exploradas:', exploradas, '| casillas:', res && res.camino ? res.camino.length : 0);
+    } catch (e) {}
     this.resultadoActual = res;
+    return res;
+  }
+
+  calcularYCaminarlizar(destino, solicitante) {
+    if (!destino || !this.hormiga) return;
+    const pedido = solicitante || 'manual';
+    this.ultimoDestino = { x: destino.x, y: destino.y };
+    const inicio = { x: this.hormiga.casilla.x, y: this.hormiga.casilla.y };
+    const res = this.buscarCamino(inicio, destino, pedido);
     if (!res || res.camino === null) {
       if (this.hormiga) {
         this.hormiga.camino = [];
@@ -419,6 +432,23 @@ class JuegoEscena extends Phaser.Scene {
     }
     this.actualizarHUD();
     this.dibujarDebug();
+  }
+
+  recalcularConObjetivoActual() {
+    let objetivo = null;
+    let solicitante = 'manual';
+    if (this.modoAutonomo) {
+      solicitante = 'FSM';
+      if (this.fsm && this.fsm.destinoActual) objetivo = this.fsm.destinoActual;
+      else if (this.ultimoDestino) objetivo = this.ultimoDestino;
+    } else if (this.ultimoDestino) {
+      objetivo = this.ultimoDestino;
+    }
+    if (this.hormiga && objetivo) {
+      this.calcularYCaminarlizar(objetivo, solicitante);
+    } else {
+      this.actualizarHUD();
+    }
   }
 
   onClick(pointer) {
@@ -450,6 +480,9 @@ class JuegoEscena extends Phaser.Scene {
     }
     const shift = pointer.event && pointer.event.shiftKey;
     if (shift) {
+      if (this.modoAutonomo) {
+        this.modoAutonomo = false;
+      }
       if (this.hormiga && this.hormiga.enMovimiento && !this.hormiga.pausado) {
         if (this.hormiga.objetivoPaso) {
           this.hormiga.casilla.x = this.hormiga.objetivoPaso.x;
@@ -459,7 +492,7 @@ class JuegoEscena extends Phaser.Scene {
         this.hormiga.tPaso = 0;
         this.hormiga.enMovimiento = false;
       }
-      this.calcularYCaminarlizar({ x: tx, y: ty });
+      this.calcularYCaminarlizar({ x: tx, y: ty }, 'manual');
       return;
     }
     if (window.esBorde && window.esBorde(tx, ty)) return;
@@ -477,7 +510,7 @@ class JuegoEscena extends Phaser.Scene {
       window.limpiarInaccesibles(this.fsm);
       if (this.fsm.esperandoSinObjetivo && this.modoAutonomo && window.actualizarFSM) {
         const resF = window.actualizarFSM(this.fsm, this.hormiga, { mapa: window.mapa, hormiguero: window.hormiguero, fuentesComida: window.fuentesComida, ANCHO: window.ANCHO, ALTO: window.ALTO, modoAutonomo: this.modoAutonomo });
-        if (resF && resF.destino) this.calcularYCaminarlizar(resF.destino);
+        if (resF && resF.destino) this.calcularYCaminarlizar(resF.destino, 'FSM');
       }
     }
     const colores = {
@@ -496,35 +529,19 @@ class JuegoEscena extends Phaser.Scene {
     if (event.key === '1') {
       this.algoritmoActivo = 'bfs';
       if (typeof window !== 'undefined') window.algoritmoActivo = 'bfs';
-      if (this.hormiga && this.ultimoDestino && !this.modoAutonomo) {
-        this.calcularYCaminarlizar(this.ultimoDestino);
-      } else {
-        this.actualizarHUD();
-      }
+      this.recalcularConObjetivoActual();
     } else if (event.key === '2') {
       this.algoritmoActivo = 'dijkstra';
       if (typeof window !== 'undefined') window.algoritmoActivo = 'dijkstra';
-      if (this.hormiga && this.ultimoDestino && !this.modoAutonomo) {
-        this.calcularYCaminarlizar(this.ultimoDestino);
-      } else {
-        this.actualizarHUD();
-      }
+      this.recalcularConObjetivoActual();
     } else if (event.key === '3') {
       this.algoritmoActivo = 'astar';
       if (typeof window !== 'undefined') window.algoritmoActivo = 'astar';
-      if (this.hormiga && this.ultimoDestino && !this.modoAutonomo) {
-        this.calcularYCaminarlizar(this.ultimoDestino);
-      } else {
-        this.actualizarHUD();
-      }
+      this.recalcularConObjetivoActual();
     } else if (event.key === 'n' || event.key === 'N') {
       this.modoNavegacion = this.modoNavegacion === 'directa' ? 'segura' : 'directa';
       if (typeof window !== 'undefined') window.modoNavegacion = this.modoNavegacion;
-      if (this.hormiga && this.ultimoDestino && !this.modoAutonomo) {
-        this.calcularYCaminarlizar(this.ultimoDestino);
-      } else {
-        this.actualizarHUD();
-      }
+      this.recalcularConObjetivoActual();
     } else if (event.key === 'm' || event.key === 'M') {
       this.modoAutonomo = !this.modoAutonomo;
     if (this.modoAutonomo && this.fsm) {
@@ -667,6 +684,13 @@ class JuegoEscena extends Phaser.Scene {
               }
             }
           }
+          // entrega manual al llegar al hormiguero: no cambia FSM ni recupera energía
+          if (!this.modoAutonomo && this.fsm.llevaComida && window.hormiguero &&
+              this.hormiga.casilla.x === window.hormiguero.x && this.hormiga.casilla.y === window.hormiguero.y) {
+            this.fsm.comidaEntregada = (this.fsm.comidaEntregada || 0) + 1;
+            this.fsm.llevaComida = false;
+            try { console.log('Entrega manual:', this.fsm.comidaEntregada, '| estado FSM:', this.fsm.estado); } catch(e){}
+          }
           // olfato al completar casilla en EXPLORAR
           if (this.modoAutonomo && this.fsm.estado === 'EXPLORAR' && window.olfatear && window.elegirComida) {
             window.olfatear(this.fsm, this.hormiga, window.fuentesComida);
@@ -684,12 +708,7 @@ class JuegoEscena extends Phaser.Scene {
               }
               try { console.log('FSM cambio:', ant, '->', this.fsm.estado, '| energia:', this.fsm.energia, '| llevaComida:', this.fsm.llevaComida); } catch(e){}
               this.ultimoDestino = { x: comida.x, y: comida.y };
-              if (typeof window !== 'undefined') { window.modoNavegacion = this.modoNavegacion; window.algoritmoActivo = this.algoritmoActivo; window._bfsAvisoSeguro = false; }
-              let res = null;
-              if (this.algoritmoActivo === 'bfs') res = window.bfs(this.hormiga.casilla, comida, window.costo, 'bfs');
-              else if (this.algoritmoActivo === 'dijkstra') res = window.dijkstra(this.hormiga.casilla, comida, window.costo, 'dijkstra');
-              else if (this.algoritmoActivo === 'astar') res = window.astar(this.hormiga.casilla, comida, window.costo, 'astar');
-              this.resultadoActual = res;
+              const res = this.buscarCamino(this.hormiga.casilla, comida, 'FSM');
               if (res && res.camino && window.iniciarCamino) window.iniciarCamino(this.hormiga, res.camino);
             }
           }
@@ -724,12 +743,7 @@ class JuegoEscena extends Phaser.Scene {
       const resF = window.actualizarFSM(this.fsm, this.hormiga, { mapa: window.mapa, hormiguero: window.hormiguero, fuentesComida: window.fuentesComida, ANCHO: window.ANCHO, ALTO: window.ALTO, modoAutonomo: this.modoAutonomo }, delta);
       if (resF && resF.destino && !this.hormiga.enMovimiento) {
         this.ultimoDestino = { x: resF.destino.x, y: resF.destino.y };
-        if (typeof window !== 'undefined') { window.modoNavegacion = this.modoNavegacion; window.algoritmoActivo = this.algoritmoActivo; window._bfsAvisoSeguro = false; }
-        let res = null;
-        if (this.algoritmoActivo === 'bfs') res = window.bfs(this.hormiga.casilla, resF.destino, window.costo, 'bfs');
-        else if (this.algoritmoActivo === 'dijkstra') res = window.dijkstra(this.hormiga.casilla, resF.destino, window.costo, 'dijkstra');
-        else if (this.algoritmoActivo === 'astar') res = window.astar(this.hormiga.casilla, resF.destino, window.costo, 'astar');
-        this.resultadoActual = res;
+        const res = this.buscarCamino(this.hormiga.casilla, resF.destino, 'FSM');
         if (res && res.camino && window.iniciarCamino) window.iniciarCamino(this.hormiga, res.camino);
         else if (res && res.camino === null && this.fsm) { if (window.marcarInaccesible) window.marcarInaccesible(this.fsm, resF.destino.x, resF.destino.y); }
       }

@@ -10,7 +10,7 @@ Dos formas seleccionables de decidir qué camino es bueno (directa y segura) y r
   - Dijkstra y A*: las zonas expuestas suman una penalización alta (por ejemplo +20) y sus casillas vecinas una menor (+5). La hormiga rodea si existe alternativa razonable.
   - Los tres algoritmos tratan un costo Infinity como no transitable. `costoSeguro` devuelve Infinity en zonas expuestas cuando el algoritmo es BFS; si da `null`, reintentar con `costoDirecto` y avisar "BFS: sin ruta segura, cruza zona expuesta".
 - Al cambiar de modo con la hormiga en movimiento, recalcula desde su casilla actual.
-- **Edición en vivo:** Shift + clic izquierdo da destino a la hormiga (herramienta de prueba). Clic izquierdo solo pone o saca piedras. Clic derecho deja una fuente de comida.
+- **Edición en vivo:** Shift + clic izquierdo da destino a la hormiga (herramienta de prueba). Si la simulación está en modo autónomo, primero cambia a manual (igual que `M`) y el HUD muestra MANUAL; la FSM queda completamente detenida. Clic izquierdo solo pone o saca piedras. Clic derecho deja una fuente de comida.
   - No se puede poner piedra sobre la hormiga, sobre la casilla a la que se está moviendo, sobre el hormiguero ni sobre la comida. Las piedras del borde no se pueden sacar.
   - Clic derecho: comida solo en casillas transitables sin comida, sin hormiga ni hormiguero. Desactivar menú contextual.
 - **Bloqueos:** antes de avanzar a la siguiente casilla, la hormiga verifica que siga siendo transitable. Si no, recalcula desde donde está.

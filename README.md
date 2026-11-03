@@ -34,7 +34,49 @@ Simulación 2D con IA para una hormiga que explora, busca comida con olfato, la 
 - `Click izq` - Poner/sacar piedra
 - `Click der` - Agregar comida
 
-## Desarrollo
-- `npm run dev` (servidor en `http://localhost:8000`)
-- Abrir `http://localhost:8000`
+## Cómo ejecutar desde otra PC
+
+### Requisitos
+- Node.js 18 o superior (incluye npm): https://nodejs.org/
+- Git (opcional, para clonar el repositorio)
+- Conexión a internet: Phaser se carga desde un CDN
+
+### Pasos
+1. Clonar el repositorio (o descargar el ZIP y descomprimirlo):
+   ```bash
+   git clone https://github.com/ShaarDW/PIAPC-Trabajo_Final-La_hormiguita.git
+   cd PIAPC-Trabajo_Final-La_hormiguita
+   ```
+2. Instalar las dependencias del servidor de desarrollo:
+   ```bash
+   npm install
+   ```
+3. Iniciar el servidor:
+   ```bash
+   npm run dev
+   ```
+4. Abrir en el navegador:
+   ```
+   http://localhost:8000
+   ```
+
+No hace falta compilar ni instalar Phaser: el proyecto usa JavaScript vanilla y carga Phaser desde CDN.
+
+### Acceso desde otra PC en la misma red (opcional)
+Con `npm run dev` el servidor queda disponible en la red local:
+1. Obtener la IP local de la PC que ejecuta el proyecto:
+   - Windows: `ipconfig` (IPv4)
+   - macOS/Linux: `ifconfig` o `ip addr`
+2. Desde la otra PC, abrir en el navegador:
+   ```
+   http://IP-DE-LA-PC:8000
+   ```
+3. Si no carga, permitir Node.js/serve en el firewall de la PC que ejecuta el servidor.
+
+### Alternativa sin npm
+Si se prefiere no instalar dependencias, desde la carpeta del proyecto:
+```bash
+python -m http.server 8000
+```
+Luego abrir `http://localhost:8000` (o `http://IP-DE-LA-PC:8000` desde otra PC de la misma red).
 

@@ -93,6 +93,17 @@ function marcarExploradasRadio(fsm, hormiga) {
   }
 }
 
+function fuenteEnCasilla(fuentesComida, casilla) {
+  if (!fuentesComida || !casilla) return null;
+  for (let i = 0; i < fuentesComida.length; i++) {
+    const f = fuentesComida[i];
+    if (f.x === casilla.x && f.y === casilla.y && typeof f.porciones === 'number' && f.porciones > 0) {
+      return f;
+    }
+  }
+  return null;
+}
+
 function encontrarPuntoExplorar(fsm, hormiga, ANCHO, ALTO, mapa) {
   if (!fsm || !hormiga) return null;
   if (!fsm.visitadas) fsm.visitadas = new Set();
@@ -230,27 +241,31 @@ function actualizarFSM(fsm, hormiga, ctx, delta) {
   }
 
   if (fsm.estado === 'RECOGER') {
-    if (fsm.destinoActualRef) {
-      const ref = fsm.destinoActualRef;
-      if (typeof ref.porciones === 'number') {
-        ref.porciones = ref.porciones - 1;
-        if (ref.porciones <= 0) {
-          if (ctx.fuentesComida) {
-            for (let i = 0; i < ctx.fuentesComida.length; i++) {
-              if (ctx.fuentesComida[i] === ref) {
-                ctx.fuentesComida.splice(i, 1);
-                break;
-              }
-            }
-          }
-          for (let i = 0; i < fsm.memoriaConocidas.length; i++) {
-            if (fsm.memoriaConocidas[i] === ref) {
-              fsm.memoriaConocidas.splice(i, 1);
-              break;
-            }
+    const ref = fuenteEnCasilla(ctx.fuentesComida, hormiga.casilla);
+    if (!ref) {
+      const ant = fsm.estado;
+      fsm.estado = 'EXPLORAR';
+      fsm.destinoActual = null;
+      fsm.destinoActualRef = null;
+      logCambioEstado(fsm, ant, fsm.estado);
+      return { accion: 'explorar' };
+    }
+    fsm.destinoActualRef = ref;
+    ref.porciones = ref.porciones - 1;
+    if (ref.porciones <= 0) {
+      if (ctx.fuentesComida) {
+        for (let i = 0; i < ctx.fuentesComida.length; i++) {
+          if (ctx.fuentesComida[i] === ref) {
+            ctx.fuentesComida.splice(i, 1);
+            break;
           }
         }
-        // si porciones > 0, solo bajar porción, mantener en fuentes/memoria
+      }
+      for (let i = 0; i < fsm.memoriaConocidas.length; i++) {
+        if (fsm.memoriaConocidas[i] === ref) {
+          fsm.memoriaConocidas.splice(i, 1);
+          break;
+        }
       }
     }
     const ant = fsm.estado;
@@ -312,6 +327,16 @@ function actualizarFSM(fsm, hormiga, ctx, delta) {
         return { accion: 'explorar' };
       }
     }
+    const fuenteActual = fuenteEnCasilla(ctx.fuentesComida, hormiga.casilla);
+    if (!fuenteActual) {
+      const ant = fsm.estado;
+      fsm.estado = 'EXPLORAR';
+      fsm.destinoActual = null;
+      fsm.destinoActualRef = null;
+      logCambioEstado(fsm, ant, fsm.estado);
+      return { accion: 'explorar' };
+    }
+    fsm.destinoActualRef = fuenteActual;
     const ant = fsm.estado;
     fsm.estado = 'RECOGER';
     fsm.pausaRestante = 500;
