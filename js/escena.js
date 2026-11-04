@@ -277,10 +277,10 @@ class JuegoEscena extends Phaser.Scene {
     const pct = Math.max(0, Math.min(100, energia));
     const barra = '<div style="margin:4px 0;"><div style="background:#222;height:8px;width:110px;border-radius:4px;overflow:hidden;border:1px solid #555;"><div style="background:linear-gradient(90deg,' + (pct<30?'#ff4444,#ff6666':'#44ff44,#66ff66') + ');height:8px;width:' + pct + '%;"></div></div><div style="font-size:11px;">' + energia + '/100</div></div>';
     hud.innerHTML = '<div style="font-weight:bold;font-size:14px;margin-bottom:4px;">🐜 Hormiga recolectora</div>' +
-                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>IA</b><br/>Alg: ' + algo + ' | Nav: ' + (this.modoNavegacion || 'directa') + ' (N)<br/>Modo: ' + (this.modoAutonomo ? 'AUTÓNOMO (M)' : 'MANUAL (M)') + '</div>' +
-                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>Estado</b><br/>FSM: ' + estado + ' | ' + mov + '<br/>Vel: ' + (this.hormiga ? this.hormiga.velocidadSim.toFixed(2) : '1.00') + '</div>' +
+                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>IA</b><br/>Algoritmo: ' + algo + '<br/>Exploradas: ' + exploradas + '<br/>Navegación: ' + (this.modoNavegacion || 'directa') + ' (N)<br/>Modo: ' + (this.modoAutonomo ? 'AUTÓNOMO (M)' : 'MANUAL (M)') + '</div>' +
+                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>Estado</b><br/>Estado: ' + estado + '<br/>Movimiento: ' + mov + '<br/>Velocidad: ' + (this.hormiga ? this.hormiga.velocidadSim.toFixed(2) : '1.00') + '</div>' +
                     '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>Energía</b>' + barra + '</div>' +
-                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>Recolecta</b><br/>Entregadas: ' + entregadas + '<br/>Camino: ' + costo + ' | Expl: ' + exploradas + '</div>' +
+                    '<div style="background:#2a2a2a;padding:4px 6px;border-radius:4px;margin:2px 0;"><b>Recolecta</b><br/>Entregadas: ' + entregadas + '<br/>Camino: ' + costo + '</div>' +
                     avisoComida +
                     aviso +
                     (this.resultadoActual && this.resultadoActual.camino === null ? '<div style="color:#ff6666;">Sin camino</div>' : '');
@@ -308,67 +308,57 @@ class JuegoEscena extends Phaser.Scene {
       this.actualizarHUD();
       return;
     }
-    // Con D, pintar muy tenue las casillas exploradas (FSM)
+    // Con D, casillas exploradas por el algoritmo: azul tenue sin borde.
+    if (this.debugActivo && this.resultadoActual && this.resultadoActual.exploradas) {
+      for (let i = 0; i < this.resultadoActual.exploradas.length; i++) {
+        const p = this.resultadoActual.exploradas[i];
+        const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 6, t - 6, 0x2F6FED, 0.35);
+        rect.setDepth(20);
+        this.grupoExploradas.add(rect);
+      }
+    }
+
+    // Con D, casillas exploradas por la hormiga (FSM/olfato): sólo un punto pequeño.
     if (this.debugActivo && this.fsm && this.fsm.visitadas) {
       this.fsm.visitadas.forEach((k) => {
         const [vx, vy] = k.split(',');
         const px = parseInt(vx), py = parseInt(vy);
-        const rect = this.add.rectangle(px * t + 16, py * t + 16, t - 6, t - 6, 0x87CEEB, 0.12);
-        rect.setDepth(39);
-        this.grupoExploradas.add(rect);
+        const punto = this.add.circle(px * t + 16, py * t + 16, 1.5, 0xFFFFFF, 0.3);
+        punto.setDepth(15);
+        this.grupoExploradas.add(punto);
       });
-    } else if (this.debugActivo && this.resultadoActual && this.resultadoActual.exploradas) {
-      for (let i = 0; i < this.resultadoActual.exploradas.length; i++) {
-        const p = this.resultadoActual.exploradas[i];
-        const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 8, t - 8, 0x87CEEB, 0.25);
-        rect.setDepth(40);
-        this.grupoExploradas.add(rect);
-      }
     }
 
     const restante = window.getCaminoRestante ? window.getCaminoRestante(this.hormiga) : [];
     if (restante && restante.length > 0) {
       for (let i = 0; i < restante.length; i++) {
         const p = restante[i];
-        const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 4, t - 4, 0x00FF00, 0.35);
-        rect.setStrokeStyle(2, 0x00FF00);
-        rect.setDepth(50);
-        this.grupoCamino.add(rect);
+        const punto = this.add.circle(p.x * t + 16, p.y * t + 16, 5, 0xFFF2A8, 1);
+        punto.setStrokeStyle(1.5, 0x000000);
+        punto.setDepth(50);
+        this.grupoCamino.add(punto);
       }
-    } else if (this.resultadoActual && this.resultadoActual.camino) {
-      for (let i = 0; i < this.resultadoActual.camino.length; i++) {
-        const p = this.resultadoActual.camino[i];
-        const rect = this.add.rectangle(p.x * t + 16, p.y * t + 16, t - 4, t - 4, 0x00FF00, 0.2);
-        rect.setStrokeStyle(1, 0x00FF00);
-        rect.setDepth(50);
-        this.grupoCamino.add(rect);
-      }
+      const destino = restante[restante.length - 1];
+      const anillo = this.add.circle(destino.x * t + 16, destino.y * t + 16, 12, 0xFFF2A8, 0);
+      anillo.setStrokeStyle(3, 0xFFF2A8, 1);
+      anillo.setDepth(51);
+      this.grupoCamino.add(anillo);
     }
 
-    if (this.debugActivo && window.obtenerVecinasZonasExpuestas) {
+    if (this.debugActivo && this.modoNavegacion === 'segura' && window.obtenerVecinasZonasExpuestas) {
       const set = window.obtenerVecinasZonasExpuestas();
       set.forEach((k) => {
         const [cx, cy] = k.split(',');
         const px = parseInt(cx), py = parseInt(cy);
         const rect = this.add.rectangle(px * t + 16, py * t + 16, t - 10, t - 10, 0x000000, 0);
-        rect.setStrokeStyle(2, 0xFFFF00);
+        rect.setStrokeStyle(1, 0xFFE082, 0.35);
         rect.setDepth(45);
         this.grupoDebugExtra.add(rect);
       });
     }
 
-    // radio olfato y fuentes recordadas
+    // fuentes recordadas
     if (this.debugActivo && this.fsm && this.hormiga) {
-      for (let dy = -4; dy <= 4; dy++) {
-        for (let dx = -4; dx <= 4; dx++) {
-          if (Math.abs(dx) + Math.abs(dy) <= 4) {
-            const rect = this.add.rectangle((this.hormiga.casilla.x + dx) * t + 16, (this.hormiga.casilla.y + dy) * t + 16, t - 12, t - 12, 0x000000, 0);
-            rect.setStrokeStyle(1, 0xFFFFFF);
-            rect.setDepth(43);
-            this.grupoDebugExtra.add(rect);
-          }
-        }
-      }
       if (this.fsm.memoriaConocidas) {
         for (let i = 0; i < this.fsm.memoriaConocidas.length; i++) {
           const fc = this.fsm.memoriaConocidas[i];
